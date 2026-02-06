@@ -201,6 +201,12 @@
             border-radius: 2px;
             box-shadow: 0 0 2px rgba(0,0,0,0.3);
         }
+
+        /* Fix alignment of MC options in modal */
+        .modal-card-body .radio.panel-block {
+            display: flex;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -1530,7 +1536,18 @@
                         document.getElementById('seek-bar').value = App.Player.maxTime;
                         App.UI.alert("Forward seeking is restricted until you have watched the video.", "Navigation Restricted");
                     } else {
-                        App.videoManager.seekTo(seconds);
+                        // Check if seeking past an unanswered question
+                        const firstUnanswered = App.Player.lessonData.questions
+                            .filter(q => !App.Player.answeredIds.has(q.id))
+                            .sort((a, b) => a.time - b.time)[0];
+
+                        if (firstUnanswered && seconds > firstUnanswered.time) {
+                            App.videoManager.seekTo(firstUnanswered.time);
+                            document.getElementById('seek-bar').value = firstUnanswered.time;
+                            App.UI.alert("You cannot fast forward past an unanswered question.", "Navigation Restricted");
+                        } else {
+                            App.videoManager.seekTo(seconds);
+                        }
                     }
                 },
                 
