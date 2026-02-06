@@ -281,6 +281,15 @@
     </div>
 
     <script>
+        // YouTube API Ready Handling
+        var isYouTubeReady = false;
+        var onYouTubeReadyCallbacks = [];
+        window.onYouTubeIframeAPIReady = function() {
+            isYouTubeReady = true;
+            onYouTubeReadyCallbacks.forEach(cb => cb());
+            onYouTubeReadyCallbacks = [];
+        };
+
         /**
          * Namespace: QT_APP
          */
@@ -369,45 +378,53 @@
             }
 
             initYouTube() {
-                // Assumes YT API is loaded
-                const playerVars = { 
-                    'playsinline': 1, 
-                    'controls': this.enableControls ? 1 : 0,
-                    'disablekb': 1, 
-                    'rel': 0 
-                };
+                const initPlayer = () => {
+                    // Assumes YT API is loaded
+                    const playerVars = {
+                        'playsinline': 1,
+                        'controls': this.enableControls ? 1 : 0,
+                        'disablekb': 1,
+                        'rel': 0
+                    };
 
-                // Only set origin if we are on a server (http/https) to avoid Error 153 on file://
-                if (window.location.protocol.startsWith('http')) {
-                    playerVars.origin = window.location.origin;
-                }
+                    // Only set origin if we are on a server (http/https) to avoid Error 153 on file://
+                    if (window.location.protocol.startsWith('http')) {
+                        playerVars.origin = window.location.origin;
+                    }
 
-                this.player = new YT.Player(this.containerId, {
-                    height: '100%',
-                    width: '100%',
-                    videoId: this.videoId,
-                    playerVars: playerVars,
-                    events: {
-                        'onReady': () => this.onReady(),
-                        'onStateChange': (e) => {
-                            if (e.data === YT.PlayerState.ENDED) {
-                                this.onStateChange({ status: 'ended' });
-                            }
-                        },
-                        'onError': (e) => {
-                            console.error('YT Error:', e.data);
-                            if(e.data === 150 || e.data === 101 || e.data === 153) {
-                                alert('YouTube Player Error ' + e.data + '. \n\nIf you are opening this file directly (file://), YouTube often blocks playback. \n\nPlease try running a local server (e.g. "python3 -m http.server") or using a different video.');
+                    this.player = new YT.Player(this.containerId, {
+                        height: '100%',
+                        width: '100%',
+                        videoId: this.videoId,
+                        playerVars: playerVars,
+                        events: {
+                            'onReady': () => this.onReady(),
+                            'onStateChange': (e) => {
+                                if (e.data === YT.PlayerState.ENDED) {
+                                    this.onStateChange({ status: 'ended' });
+                                }
+                            },
+                            'onError': (e) => {
+                                console.error('YT Error:', e.data);
+                                if(e.data === 150 || e.data === 101 || e.data === 153) {
+                                    alert('YouTube Player Error ' + e.data + '. \n\nIf you are opening this file directly (file://), YouTube often blocks playback. \n\nPlease try running a local server (e.g. "python3 -m http.server") or using a different video.');
+                                }
                             }
                         }
-                    }
-                });
-                // Mocking polling for timeupdate as YT doesn't have a specific event for it
-                this.pollInterval = setInterval(() => {
-                    if (this.player && this.player.getCurrentTime) {
-                         this.onStateChange({ time: this.player.getCurrentTime(), status: 'playing' });
-                    }
-                }, CONSTANTS.POLL_INTERVAL);
+                    });
+                    // Mocking polling for timeupdate as YT doesn't have a specific event for it
+                    this.pollInterval = setInterval(() => {
+                        if (this.player && this.player.getCurrentTime) {
+                             this.onStateChange({ time: this.player.getCurrentTime(), status: 'playing' });
+                        }
+                    }, CONSTANTS.POLL_INTERVAL);
+                };
+
+                if (window.isYouTubeReady) {
+                    initPlayer();
+                } else {
+                    window.onYouTubeReadyCallbacks.push(initPlayer);
+                }
             }
 
             initVimeo() {
@@ -1139,12 +1156,12 @@
                                     </div>
                                     <div class="media-content">
                                         <p class="title is-6 mb-1">${q.text}</p>
-                                        <p class="subtitle is-7 has-text-grey is-uppercase">
-                                            <span class="icon is-small"><i class="fas fa-pencil-alt"></i></span>
-                                        </p>
                                     </div>
                                     <div class="media-right">
-                                        <button class="delete" onclick="event.stopPropagation(); App.Editor.deleteQuestion('${q.id}')"></button>
+                                        <button class="button is-small is-info is-light" onclick="event.stopPropagation(); App.Editor.showQuestionForm('${q.id}')">
+                                            <span class="icon"><i class="fas fa-pencil-alt"></i></span>
+                                        </button>
+                                        <button class="delete ml-2" onclick="event.stopPropagation(); App.Editor.deleteQuestion('${q.id}')"></button>
                                     </div>
                                 </div>
                             </div>
