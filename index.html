@@ -155,6 +155,22 @@
             border-bottom-left-radius: 12px;
             border-bottom-right-radius: 12px;
         }
+
+        /* Student Player Controls */
+        .player-controls {
+            background-color: #fff;
+            border-top: 1px solid #f0f0f0;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+        .player-controls input[type=range] {
+            width: 100%;
+            cursor: pointer;
+            flex-grow: 1;
+        }
     </style>
 </head>
 <body>
@@ -272,9 +288,10 @@
 
         // --- Video Manager Stub ---
         class VideoManager {
-            constructor(containerId, url, onReady, onStateChange) {
+            constructor(containerId, url, onReady, onStateChange, enableControls = false) {
                 this.containerId = containerId;
                 this.url = url;
+                this.enableControls = enableControls;
                 this.type = this.detectType(url);
                 this.videoId = this.parseId(url);
                 this.player = null;
@@ -309,11 +326,23 @@
                 else if (this.type === 'vimeo') this.initVimeo();
             }
 
+            destroy() {
+                if (this.player) {
+                    if (this.type === 'youtube' && typeof this.player.destroy === 'function') {
+                        try { this.player.destroy(); } catch(e) { console.error(e); }
+                    } else if (this.type === 'vimeo' && typeof this.player.unload === 'function') {
+                        try { this.player.unload(); } catch(e) { console.error(e); }
+                    }
+                    this.player = null;
+                }
+                if(this.pollInterval) clearInterval(this.pollInterval);
+            }
+
             initYouTube() {
                 // Assumes YT API is loaded
                 const playerVars = { 
                     'playsinline': 1, 
-                    'controls': 0, 
+                    'controls': this.enableControls ? 1 : 0,
                     'disablekb': 1, 
                     'rel': 0 
                 };
@@ -352,7 +381,7 @@
             }
 
             initVimeo() {
-                const options = { id: this.videoId, controls: false }; // controls false for strict
+                const options = { id: this.videoId, controls: this.enableControls }; // controls false for strict
                 this.player = new Vimeo.Player(this.containerId, options);
                 this.player.on('loaded', () => this.onReady());
                 this.player.on('timeupdate', (data) => this.onStateChange({ time: data.seconds, status: 'playing' }));
@@ -361,9 +390,14 @@
 
             getCurrentTime() {
                 // Wrapper
-                if (this.type === 'youtube' && this.player.getCurrentTime) return this.player.getCurrentTime();
+                if (this.type === 'youtube' && this.player && this.player.getCurrentTime) return this.player.getCurrentTime();
                 // Vimeo is async, this is a simplified sync wrapper stub, might need async handling in real implementation
                 return 0; 
+            }
+
+            getDuration() {
+                if (this.type === 'youtube' && this.player && this.player.getDuration) return this.player.getDuration();
+                return 0;
             }
 
             seekTo(seconds) {
@@ -792,7 +826,7 @@
                                     </button>
 
                                     <!-- New Question Form (Hidden by default) -->
-                                    <div id="new-question-form" class="box has-background-light is-hidden">
+                                    <div id="new-question-form" class="box has-background-light is-hidden" style="position: relative; z-index: 10;">
                                         <h4 class="subtitle is-6"><span id="form-mode">New</span> Question <span id="form-timestamp" class="tag is-dark is-pulled-right">00:00</span></h4>
                                         <input type="hidden" id="q-edit-id">
 
@@ -899,9 +933,13 @@
                     const url = document.getElementById('video-url-input').value;
                     if(!url) return;
                     App.currentLesson.videoUrl = url;
+
+                    if (App.videoManager) App.videoManager.destroy();
+
                     App.videoManager = new VideoManager('editor-video-container', url, 
                         () => console.log('Video Ready'), 
-                        (state) => { /* Update time display if needed */ }
+                        (state) => { /* Update time display if needed */ },
+                        true // Enable Controls for Teacher
                     );
                 },
 
@@ -1128,7 +1166,7 @@
             },
 
             loadStudentMode: (hash) => {
-                const encoded = hash.split('data=')[1];
+                const encoded = hash.split('data=')[1].split('&')[0];
                 if (!encoded) return;
                 
                 try {
@@ -1143,7 +1181,15 @@
                             <div class="columns is-centered">
                                 <div class="column is-10">
                                     <div class="box p-0 overflow-hidden" style="border-radius: 8px;">
-                                        <div id="student-video-container" class="video-container"></div>
+                                        <div id="student-video-container" class="video-container" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0;"></div>
+                                        <div id="student-controls" class="player-controls">
+                                            <button class="button is-small is-primary is-rounded mr-3" onclick="App.Player.togglePlay()">
+                                                <span class="icon is-small"><i class="fas fa-play" id="play-icon"></i></span>
+                                            </button>
+                                            <span class="is-size-7 is-family-monospace mr-3" style="min-width: 45px; text-align: right;" id="time-current">00:00</span>
+                                            <input type="range" id="seek-bar" min="0" max="100" value="0" step="1" class="mr-3" oninput="App.Player.seek(this.value)">
+                                            <span class="is-size-7 is-family-monospace" style="min-width: 45px;" id="time-duration">00:00</span>
+                                        </div>
                                     </div>
                                     
                                     <div class="level is-mobile mt-4">
@@ -1191,18 +1237,22 @@
                 activeQuestionId: null,
                 answers: {}, // Stores student responses
                 lastSave: 0,
+                maxTime: 0,
                 
                 init: (data) => {
                     App.Player.lessonData = data;
                     App.Player.answeredIds = new Set();
                     App.Player.answers = {};
                     App.Player.activeQuestionId = null;
+                    App.Player.maxTime = 0;
                     
                     // Load Progress
                     const progress = Storage.getProgress(data.id);
                     if (progress) {
                         if (progress.answeredIds) App.Player.answeredIds = new Set(progress.answeredIds);
                         if (progress.answers) App.Player.answers = progress.answers;
+                        if (progress.maxTime) App.Player.maxTime = progress.maxTime;
+                        else if (progress.time) App.Player.maxTime = progress.time;
                     }
 
                     App.Player.updateProgressUI();
@@ -1218,11 +1268,21 @@
 
                 onStateChange: (state) => {
                     if (state.status === 'ended') {
+                        document.getElementById('play-icon').className = 'fas fa-undo';
                         App.Player.finishLesson();
                         return;
                     }
+
+                    if (state.status === 'playing') {
+                        const icon = document.getElementById('play-icon');
+                        if(icon) icon.className = 'fas fa-pause';
+                    }
+
                     if (state.time !== undefined) {
+                        if (state.time > App.Player.maxTime) App.Player.maxTime = state.time;
+
                         App.Player.checkGatekeeper(state.time);
+                        App.Player.updateControls(state.time);
                         
                         // Auto-save every 5 seconds
                         const now = Date.now();
@@ -1232,12 +1292,50 @@
                         }
                     }
                 },
+
+                updateControls: (time) => {
+                    const duration = App.videoManager.getDuration();
+                    const seekBar = document.getElementById('seek-bar');
+                    if (seekBar && duration > 0) {
+                         if (document.activeElement !== seekBar) {
+                            seekBar.max = duration;
+                            seekBar.value = time;
+                         }
+                        document.getElementById('time-current').innerText = App.Editor.formatTime(time);
+                        document.getElementById('time-duration').innerText = App.Editor.formatTime(duration);
+                    }
+                },
+
+                togglePlay: () => {
+                     const icon = document.getElementById('play-icon');
+                     if (icon.classList.contains('fa-pause')) {
+                         App.videoManager.pause();
+                         icon.className = 'fas fa-play';
+                     } else {
+                         App.videoManager.play();
+                         icon.className = 'fas fa-pause';
+                     }
+                },
+
+                seek: (val) => {
+                    const seconds = parseFloat(val);
+                    const preventSkip = App.Player.lessonData.settings.preventSkip;
+
+                    if (preventSkip && seconds > App.Player.maxTime) {
+                        App.videoManager.seekTo(App.Player.maxTime);
+                        document.getElementById('seek-bar').value = App.Player.maxTime;
+                        App.UI.alert("Forward seeking is restricted until you have watched the video.", "Navigation Restricted");
+                    } else {
+                        App.videoManager.seekTo(seconds);
+                    }
+                },
                 
                 saveProgress: (time) => {
                     Storage.saveProgress(App.Player.lessonData.id, {
                         answeredIds: Array.from(App.Player.answeredIds),
                         answers: App.Player.answers,
-                        time: time
+                        time: time,
+                        maxTime: App.Player.maxTime
                     });
                 },
 
