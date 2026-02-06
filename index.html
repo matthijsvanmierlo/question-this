@@ -52,6 +52,13 @@
 
         .main-content {
             flex: 1;
+            position: relative;
+        }
+
+        .modal.is-absolute {
+            position: absolute;
+            height: 100%;
+            width: 100%;
         }
 
         .video-container {
@@ -203,6 +210,29 @@
         <div class="main-content section">
             <div class="container" id="app-root">
                 <!-- Views will be injected here via JS -->
+            </div>
+
+            <!-- Share Modal (Absolute Overlay) -->
+            <div id="share-modal" class="modal is-absolute">
+                <div class="modal-background" onclick="document.getElementById('share-modal').classList.remove('is-active')"></div>
+                <div class="modal-card">
+                    <header class="modal-card-head">
+                        <p class="modal-card-title">Share Project</p>
+                        <button class="delete" aria-label="close" onclick="document.getElementById('share-modal').classList.remove('is-active')"></button>
+                    </header>
+                    <section class="modal-card-body">
+                        <div class="field">
+                            <label class="label" id="share-label">Share Link</label>
+                            <div class="control has-icons-right">
+                                <input class="input" type="text" id="share-input" readonly>
+                                <span class="icon is-right is-clickable" onclick="App.Editor.copyLink('share-input')">
+                                    <i class="fas fa-copy"></i>
+                                </span>
+                            </div>
+                            <p class="help" id="share-help-text"></p>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
 
@@ -421,6 +451,17 @@
             currentLesson: null,
             videoManager: null,
 
+            getHashParam: (key) => {
+                try {
+                    const hash = window.location.hash.substring(1);
+                    if (!hash) return null;
+                    return new URLSearchParams(hash).get(key);
+                } catch (e) {
+                    console.error("Error parsing hash params", e);
+                    return null;
+                }
+            },
+
             UI: {
                 // Generic Modal Handler
                 showModal: (message, options = {}) => {
@@ -481,16 +522,18 @@
 
             init: () => {
                 // Check URL Hash for shared lesson
-                const hash = window.location.hash;
-                if (hash && hash.includes('data=')) {
-                    App.loadStudentMode(hash);
-                } else if (hash && hash.includes('import=')) {
-                    App.importTemplate(hash);
-                } else if (hash === '#edit') {
+                const dataVal = App.getHashParam('data');
+                const importVal = App.getHashParam('import');
+
+                if (dataVal) {
+                    App.loadStudentMode(dataVal);
+                } else if (importVal) {
+                    App.importTemplate(importVal);
+                } else if (window.location.hash === '#edit') {
                     // If no current lesson, redirect to projects or landing
                     if (!App.currentLesson) App.goHome();
                     else App.startEditor(true); // true = resume existing object
-                } else if (hash === '#projects') {
+                } else if (window.location.hash === '#projects') {
                     App.renderProjects();
                 } else {
                     App.renderLanding();
@@ -603,8 +646,7 @@
                 App.renderView(html);
             },
 
-            importTemplate: (hash) => {
-                const encoded = hash.split('import=')[1];
+            importTemplate: (encoded) => {
                 try {
                     const json = LZString.decompressFromEncodedURIComponent(encoded);
                     const lessonData = JSON.parse(json);
@@ -685,29 +727,6 @@
                                 </div>
                             </div>
                         `}
-                    </div>
-
-                    <!-- Share Modal -->
-                    <div id="share-modal" class="modal">
-                        <div class="modal-background" onclick="document.getElementById('share-modal').classList.remove('is-active')"></div>
-                        <div class="modal-card">
-                            <header class="modal-card-head">
-                                <p class="modal-card-title">Share Project</p>
-                                <button class="delete" aria-label="close" onclick="document.getElementById('share-modal').classList.remove('is-active')"></button>
-                            </header>
-                            <section class="modal-card-body">
-                                <div class="field">
-                                    <label class="label" id="share-label">Share Link</label>
-                                    <div class="control has-icons-right">
-                                        <input class="input" type="text" id="share-input" readonly>
-                                        <span class="icon is-right is-clickable" onclick="App.Editor.copyLink('share-input')">
-                                            <i class="fas fa-copy"></i>
-                                        </span>
-                                    </div>
-                                    <p class="help" id="share-help-text"></p>
-                                </div>
-                            </section>
-                        </div>
                     </div>
                 `;
                 App.renderView(html);
@@ -1121,7 +1140,7 @@
                                     <div class="media-content">
                                         <p class="title is-6 mb-1">${q.text}</p>
                                         <p class="subtitle is-7 has-text-grey is-uppercase">
-                                            ${q.type} <span class="icon is-small ml-1"><i class="fas fa-pencil-alt"></i></span>
+                                            <span class="icon is-small"><i class="fas fa-pencil-alt"></i></span>
                                         </p>
                                     </div>
                                     <div class="media-right">
@@ -1165,8 +1184,7 @@
                 }
             },
 
-            loadStudentMode: (hash) => {
-                const encoded = hash.split('data=')[1].split('&')[0];
+            loadStudentMode: (encoded) => {
                 if (!encoded) return;
                 
                 try {
