@@ -302,26 +302,45 @@
         const Storage = {
             getDrafts: () => JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS') || '[]'),
             saveDraft: (draft) => {
-                const drafts = Storage.getDrafts();
-                const existingIndex = drafts.findIndex(d => d.id === draft.id);
-                draft.lastModified = Date.now();
-                if (existingIndex >= 0) drafts[existingIndex] = draft;
-                else drafts.push(draft);
-                localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS', JSON.stringify(drafts));
+                try {
+                    const drafts = Storage.getDrafts();
+                    const existingIndex = drafts.findIndex(d => d.id === draft.id);
+                    draft.lastModified = Date.now();
+                    if (existingIndex >= 0) drafts[existingIndex] = draft;
+                    else drafts.push(draft);
+                    localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS', JSON.stringify(drafts));
+                } catch (e) {
+                    console.error("Storage Error:", e);
+                    alert("Failed to save project. Local storage might be full.");
+                }
             },
             deleteDraft: (id) => {
-                const drafts = Storage.getDrafts().filter(d => d.id !== id);
-                localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS', JSON.stringify(drafts));
+                try {
+                    const drafts = Storage.getDrafts().filter(d => d.id !== id);
+                    localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS', JSON.stringify(drafts));
+                } catch (e) {
+                    console.error("Storage Error:", e);
+                }
             },
             // Student Progress: { [lessonId]: { answeredIds: [], time: 0, lastAccessed: timestamp } }
             getProgress: (lessonId) => {
-                const all = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
-                return all[lessonId] || null;
+                try {
+                    const all = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
+                    return all[lessonId] || null;
+                } catch (e) {
+                    console.error("Error reading progress:", e);
+                    return null;
+                }
             },
             saveProgress: (lessonId, data) => {
-                const all = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
-                all[lessonId] = { ...all[lessonId], ...data, lastAccessed: Date.now() };
-                localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS', JSON.stringify(all));
+                try {
+                    const all = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
+                    all[lessonId] = { ...all[lessonId], ...data, lastAccessed: Date.now() };
+                    localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS', JSON.stringify(all));
+                } catch (e) {
+                    console.error("Storage Error (Progress):", e);
+                    // Silent fail or optional UI warning for students
+                }
             }
         };
 
@@ -468,6 +487,15 @@
             currentLesson: null,
             videoManager: null,
 
+            escapeHtml: (unsafe) => {
+                return (unsafe || "")
+                     .replace(/&/g, "&amp;")
+                     .replace(/</g, "&lt;")
+                     .replace(/>/g, "&gt;")
+                     .replace(/"/g, "&quot;")
+                     .replace(/'/g, "&#039;");
+            },
+
             getHashParam: (key) => {
                 try {
                     const hash = window.location.hash.substring(1);
@@ -552,24 +580,22 @@
                     else App.startEditor(true); // true = resume existing object
                 } else if (window.location.hash === '#projects') {
                     App.renderProjects();
+                } else if (window.location.hash === '#assignments') {
+                    App.renderAssignments();
                 } else {
                     App.renderLanding();
                 }
             },
 
             goHome: () => {
-                const drafts = Storage.getDrafts();
-                if (drafts.length > 0) {
-                    window.location.hash = 'projects';
-                    App.renderProjects();
-                } else {
-                    window.location.hash = '';
-                    App.renderLanding();
-                }
+                window.location.hash = '';
+                App.renderLanding();
             },
 
             renderLanding: () => {
                 const hasDrafts = Storage.getDrafts().length > 0;
+                const allProgress = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
+                const hasAssignments = Object.values(allProgress).some(a => a.title && a.source);
                 
                 const html = `
                     <section class="hero is-medium">
@@ -588,15 +614,22 @@
                                             <span>Start Creating</span>
                                         </button>
                                         ${hasDrafts ? `
-                                            <button class="button is-info is-light is-medium is-rounded px-6" onclick="App.goHome()">
+                                            <button class="button is-info is-light is-medium is-rounded px-6" onclick="window.location.hash='projects'">
                                                 <span class="icon"><i class="fas fa-folder-open"></i></span>
                                                 <span>My Projects</span>
                                             </button>
-                                        ` : `
+                                        ` : ''}
+                                        ${hasAssignments ? `
+                                            <button class="button is-success is-light is-medium is-rounded px-6" onclick="window.location.hash='assignments'">
+                                                <span class="icon"><i class="fas fa-clipboard-list"></i></span>
+                                                <span>My Assignments</span>
+                                            </button>
+                                        ` : ''}
+                                        ${!hasDrafts && !hasAssignments ? `
                                             <button class="button is-light is-medium is-rounded px-6" onclick="document.getElementById('features').scrollIntoView({behavior: 'smooth'})">
                                                 <span>Learn More</span>
                                             </button>
-                                        `}
+                                        ` : ''}
                                     </div>
                                     <p class="help is-italic mt-5">
                                         <i class="fas fa-check-circle has-text-success"></i> Works with YouTube & Vimeo
@@ -739,6 +772,81 @@
                                                     </td>
                                                 </tr>
                                             `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        `}
+                    </div>
+                `;
+                App.renderView(html);
+            },
+
+            renderAssignments: () => {
+                const allProgress = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
+                // Convert object to array and filter valid assignments
+                const assignments = Object.keys(allProgress).map(key => {
+                    return { id: key, ...allProgress[key] };
+                }).filter(a => a.title && a.source);
+
+                // Sort by lastAccessed desc
+                assignments.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+
+                let html = `
+                    <div class="container is-max-desktop">
+                        <div class="level">
+                            <div class="level-left">
+                                <h1 class="title is-3">My Assignments</h1>
+                            </div>
+                            <div class="level-right">
+                                <button class="button is-light" onclick="App.goHome()">
+                                    <span class="icon"><i class="fas fa-home"></i></span>
+                                    <span>Home</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        ${assignments.length === 0 ? `
+                            <div class="notification is-info is-light">
+                                You haven't started any assignments yet.
+                            </div>
+                        ` : `
+                            <div class="box">
+                                <div class="table-container">
+                                    <table class="table is-fullwidth is-hoverable">
+                                        <thead>
+                                            <tr>
+                                                <th>Title</th>
+                                                <th>Progress</th>
+                                                <th>Last Accessed</th>
+                                                <th class="has-text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${assignments.map(a => {
+                                                const answered = a.answeredIds ? a.answeredIds.length : 0;
+                                                const total = a.totalQuestions || '?';
+                                                const date = a.lastAccessed ? new Date(a.lastAccessed).toLocaleDateString() : 'N/A';
+                                                return `
+                                                <tr>
+                                                    <td>
+                                                        <span class="has-text-weight-bold">${App.escapeHtml(a.title)}</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="tag ${answered >= total ? 'is-success' : 'is-warning'} is-light">
+                                                            ${answered} / ${total}
+                                                        </span>
+                                                    </td>
+                                                    <td class="is-size-7">${date}</td>
+                                                    <td class="has-text-right">
+                                                        <a class="button is-small is-primary is-light" href="#data=${a.source}">
+                                                            <span class="icon"><i class="fas fa-play"></i></span>
+                                                            <span>Resume</span>
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                                `;
+                                            }).join('')}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1209,25 +1317,14 @@
                     const lessonData = JSON.parse(json);
                     
                     // Initialize Player State
-                    const savedProgress = App.Player.init(lessonData);
+                    const savedProgress = App.Player.init(lessonData, encoded);
 
                     const html = `
                         <div class="container is-max-widescreen">
                             <div class="columns is-centered">
                                 <div class="column is-10">
-                                    <div class="box p-0 overflow-hidden" style="border-radius: 8px;">
-                                        <div id="student-video-container" class="video-container" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0;"></div>
-                                        <div id="student-controls" class="player-controls">
-                                            <button class="button is-small is-primary is-rounded mr-3" onclick="App.Player.togglePlay()">
-                                                <span class="icon is-small"><i class="fas fa-play" id="play-icon"></i></span>
-                                            </button>
-                                            <span class="is-size-7 is-family-monospace mr-3" style="min-width: 45px; text-align: right;" id="time-current">00:00</span>
-                                            <input type="range" id="seek-bar" min="0" max="100" value="0" step="1" class="mr-3" oninput="App.Player.seek(this.value)">
-                                            <span class="is-size-7 is-family-monospace" style="min-width: 45px;" id="time-duration">00:00</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="level is-mobile mt-4">
+                                    <!-- Title & Progress (Moved Up) -->
+                                    <div class="level is-mobile mb-4">
                                         <div class="level-left">
                                             <div>
                                                 <h1 class="title is-5 mb-1">${lessonData.title || 'Lesson Player'}</h1>
@@ -1239,6 +1336,22 @@
                                                 <span class="icon"><i class="fas fa-home"></i></span>
                                                 <span>Exit</span>
                                             </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="box p-0 overflow-hidden" style="border-radius: 8px;">
+                                        <!-- Wrapper for Aspect Ratio -->
+                                        <div class="video-container" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+                                            <!-- Target for Player -->
+                                            <div id="student-video-container"></div>
+                                        </div>
+                                        <div id="student-controls" class="player-controls">
+                                            <button class="button is-small is-primary is-rounded mr-3" onclick="App.Player.togglePlay()">
+                                                <span class="icon is-small"><i class="fas fa-play" id="play-icon"></i></span>
+                                            </button>
+                                            <span class="is-size-7 is-family-monospace mr-3" style="min-width: 45px; text-align: right;" id="time-current">00:00</span>
+                                            <input type="range" id="seek-bar" min="0" max="100" value="0" step="1" class="mr-3" oninput="App.Player.seek(this.value)">
+                                            <span class="is-size-7 is-family-monospace" style="min-width: 45px;" id="time-duration">00:00</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1274,12 +1387,21 @@
                 lastSave: 0,
                 maxTime: 0,
                 
-                init: (data) => {
+                init: (data, encodedSource) => {
                     App.Player.lessonData = data;
                     App.Player.answeredIds = new Set();
                     App.Player.answers = {};
                     App.Player.activeQuestionId = null;
                     App.Player.maxTime = 0;
+
+                    // Save Metadata for "My Assignments"
+                    if (encodedSource) {
+                        Storage.saveProgress(data.id, {
+                            title: data.title,
+                            totalQuestions: data.questions.length,
+                            source: encodedSource
+                        });
+                    }
                     
                     // Load Progress
                     const progress = Storage.getProgress(data.id);
@@ -1566,6 +1688,7 @@
 
         // Initialize App on Load
         window.addEventListener('DOMContentLoaded', App.init);
+        window.addEventListener('hashchange', App.init);
 
     </script>
 </body>
