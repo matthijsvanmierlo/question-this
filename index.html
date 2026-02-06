@@ -207,6 +207,37 @@
             display: flex;
             align-items: center;
         }
+
+        #pending-question-indicator {
+            position: absolute;
+            /* Override generic .video-container div styles */
+            top: auto !important;
+            left: auto !important;
+            width: auto !important;
+            height: auto !important;
+
+            bottom: 20px;
+            right: 20px;
+            z-index: 20;
+            background-color: rgba(255, 221, 87, 0.95);
+            padding: 10px 20px;
+            border-radius: 25px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
+            font-weight: 600;
+            color: #3b3108;
+            border: 2px solid #fff;
+            animation: pulse 2s infinite;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -281,6 +312,7 @@
         <div class="modal-card">
             <header class="modal-card-head is-question">
                 <p class="modal-card-title" id="q-modal-title">Question</p>
+                <button class="delete" aria-label="close" onclick="App.Player.dismissQuestion()"></button>
             </header>
             <section class="modal-card-body" id="q-modal-body">
                 <!-- Question Content -->
@@ -1375,6 +1407,11 @@
                                         <div class="video-container" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
                                             <!-- Target for Player -->
                                             <div id="student-video-container"></div>
+                                            <!-- Pending Indicator -->
+                                            <div id="pending-question-indicator" class="is-hidden" onclick="App.Player.openPendingQuestion()">
+                                                <span class="icon"><i class="fas fa-exclamation-circle"></i></span>
+                                                <span>Question Pending</span>
+                                            </div>
                                         </div>
                                         <div id="student-controls" class="player-controls">
                                             <button class="button is-small is-primary is-rounded mr-3" onclick="App.Player.togglePlay()">
@@ -1417,6 +1454,7 @@
                 lessonData: null,
                 answeredIds: new Set(),
                 activeQuestionId: null,
+                pendingQuestionId: null,
                 answers: {}, // Stores student responses
                 lastSave: 0,
                 maxTime: 0,
@@ -1426,6 +1464,7 @@
                     App.Player.answeredIds = new Set();
                     App.Player.answers = {};
                     App.Player.activeQuestionId = null;
+                    App.Player.pendingQuestionId = null;
                     App.Player.maxTime = 0;
 
                     // Save Metadata for "My Assignments"
@@ -1542,8 +1581,11 @@
                             .sort((a, b) => a.time - b.time)[0];
 
                         if (firstUnanswered && seconds > firstUnanswered.time) {
-                            App.videoManager.seekTo(firstUnanswered.time);
-                            document.getElementById('seek-bar').value = firstUnanswered.time;
+                            // Resume right before the question (3s context)
+                            const rewindTime = Math.max(0, firstUnanswered.time - 3);
+                            App.videoManager.pause();
+                            App.videoManager.seekTo(rewindTime);
+                            document.getElementById('seek-bar').value = rewindTime;
                             App.UI.alert("You cannot fast forward past an unanswered question.", "Navigation Restricted");
                         } else {
                             App.videoManager.seekTo(seconds);
@@ -1577,8 +1619,25 @@
                     }
                 },
 
+                dismissQuestion: () => {
+                     App.Player.pendingQuestionId = App.Player.activeQuestionId;
+                     App.Player.activeQuestionId = null;
+                     document.getElementById('question-modal').classList.remove('is-active');
+                     document.getElementById('pending-question-indicator').classList.remove('is-hidden');
+                },
+
+                openPendingQuestion: () => {
+                    if (App.Player.pendingQuestionId) {
+                        const q = App.Player.lessonData.questions.find(x => x.id === App.Player.pendingQuestionId);
+                        if (q) App.Player.showQuestion(q);
+                    }
+                },
+
                 showQuestion: (q) => {
                     App.Player.activeQuestionId = q.id;
+                    App.Player.pendingQuestionId = null;
+                    document.getElementById('pending-question-indicator').classList.add('is-hidden');
+
                     const modal = document.getElementById('question-modal');
                     const title = document.getElementById('q-modal-title');
                     const body = document.getElementById('q-modal-body');
@@ -1653,6 +1712,9 @@
                     if (answerData) App.Player.answers[qId] = answerData;
                     App.Player.saveProgress(App.videoManager.getCurrentTime());
                     
+                    App.Player.pendingQuestionId = null;
+                    document.getElementById('pending-question-indicator').classList.add('is-hidden');
+
                     // Close Modal
                     document.getElementById('question-modal').classList.remove('is-active');
                     App.Player.activeQuestionId = null;
