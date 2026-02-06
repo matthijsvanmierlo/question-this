@@ -177,6 +177,29 @@
             width: 100%;
             cursor: pointer;
             flex-grow: 1;
+            margin: 0;
+            display: block;
+        }
+
+        .timeline-container {
+            position: relative;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            margin-right: 0.75rem;
+        }
+
+        .timeline-marker {
+            position: absolute;
+            width: 4px;
+            height: 12px;
+            background-color: #ffdd57; /* Warning color */
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5;
+            pointer-events: none;
+            border-radius: 2px;
+            box-shadow: 0 0 2px rgba(0,0,0,0.3);
         }
     </style>
 </head>
@@ -403,7 +426,8 @@
                         'playsinline': 1,
                         'controls': this.enableControls ? 1 : 0,
                         'disablekb': 1,
-                        'rel': 0
+                        'rel': 0,
+                        'modestbranding': 1
                     };
 
                     // Only set origin if we are on a server (http/https) to avoid Error 153 on file://
@@ -415,6 +439,7 @@
                         height: '100%',
                         width: '100%',
                         videoId: this.videoId,
+                        host: 'https://www.youtube-nocookie.com',
                         playerVars: playerVars,
                         events: {
                             'onReady': () => this.onReady(),
@@ -1324,14 +1349,14 @@
                             <div class="columns is-centered">
                                 <div class="column is-10">
                                     <!-- Title & Progress (Moved Up) -->
-                                    <div class="level is-mobile mb-4">
-                                        <div class="level-left">
+                                    <div class="columns mb-4 is-vcentered">
+                                        <div class="column">
                                             <div>
-                                                <h1 class="title is-5 mb-1">${lessonData.title || 'Lesson Player'}</h1>
+                                                <h1 class="title is-5 mb-4" style="line-height: 1.5;">${lessonData.title || 'Lesson Player'}</h1>
                                                 <p class="subtitle is-7 has-text-grey" id="progress-text">0 / 0 Questions Answered</p>
                                             </div>
                                         </div>
-                                        <div class="level-right">
+                                        <div class="column is-narrow">
                                             <button class="button is-small is-light" onclick="App.goHome()">
                                                 <span class="icon"><i class="fas fa-home"></i></span>
                                                 <span>Exit</span>
@@ -1350,7 +1375,10 @@
                                                 <span class="icon is-small"><i class="fas fa-play" id="play-icon"></i></span>
                                             </button>
                                             <span class="is-size-7 is-family-monospace mr-3" style="min-width: 45px; text-align: right;" id="time-current">00:00</span>
-                                            <input type="range" id="seek-bar" min="0" max="100" value="0" step="1" class="mr-3" oninput="App.Player.seek(this.value)">
+                                            <div class="timeline-container">
+                                                <input type="range" id="seek-bar" min="0" max="100" value="0" step="1" oninput="App.Player.seek(this.value)">
+                                                <div id="timeline-markers" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+                                            </div>
                                             <span class="is-size-7 is-family-monospace" style="min-width: 45px;" id="time-duration">00:00</span>
                                         </div>
                                     </div>
@@ -1423,6 +1451,21 @@
                     if(el) el.innerText = `${answered} / ${total} Questions Completed`;
                 },
 
+                renderMarkers: () => {
+                    const duration = App.videoManager.getDuration();
+                    const container = document.getElementById('timeline-markers');
+                    if (!duration || !container || container.children.length > 0) return;
+
+                    App.Player.lessonData.questions.forEach(q => {
+                        const pct = (q.time / duration) * 100;
+                        const marker = document.createElement('div');
+                        marker.className = 'timeline-marker';
+                        marker.style.left = `${pct}%`;
+                        marker.title = q.type === 'note' ? 'Note' : 'Question';
+                        container.appendChild(marker);
+                    });
+                },
+
                 onStateChange: (state) => {
                     if (state.status === 'ended') {
                         document.getElementById('play-icon').className = 'fas fa-undo';
@@ -1438,6 +1481,7 @@
                     if (state.time !== undefined) {
                         if (state.time > App.Player.maxTime) App.Player.maxTime = state.time;
 
+                        App.Player.renderMarkers();
                         App.Player.checkGatekeeper(state.time);
                         App.Player.updateControls(state.time);
                         
@@ -1457,8 +1501,11 @@
                          if (document.activeElement !== seekBar) {
                             seekBar.max = duration;
                             seekBar.value = time;
+                            document.getElementById('time-current').innerText = App.Editor.formatTime(time);
+                         } else {
+                             // User is scrubbing: use slider value for display to avoid jumping
+                             document.getElementById('time-current').innerText = App.Editor.formatTime(seekBar.value);
                          }
-                        document.getElementById('time-current').innerText = App.Editor.formatTime(time);
                         document.getElementById('time-duration').innerText = App.Editor.formatTime(duration);
                     }
                 },
