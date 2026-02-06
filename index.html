@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Question This</title>
+    
+    <!-- Libraries -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+    <script src="https://player.vimeo.com/api/player.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+
+    <style>
+        /* Custom Styles & Overrides */
+        :root {
+            --brand-primary: #3E8ED0;
+            --brand-secondary: #00D1B2;
+        }
+
+        body, html {
+            height: 100%;
+            background-color: #f5f7fa;
+            font-family: 'Inter', sans-serif;
+        }
+
+        h1, h2, h3, h4, h5, h6, .title, .navbar-item.brand-text {
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        .navbar-item.brand-text {
+            font-weight: 800;
+            font-size: 1.5rem;
+            letter-spacing: -0.5px;
+            color: #2c3e50;
+        }
+        
+        .brand-icon {
+            background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-right: 0.5rem;
+        }
+
+        .full-height {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-content {
+            flex: 1;
+        }
+
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+            padding-top: 25px;
+            height: 0;
+            background-color: #000;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 0.5em 1em -0.125em rgba(10, 10, 10, 0.1), 0 0px 0 1px rgba(10, 10, 10, 0.02);
+        }
+
+        .video-container iframe, .video-container div {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .timeline-marker {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .timeline-marker:hover {
+            transform: scale(1.1);
+        }
+
+        /* Question Overlay (Modal customization) */
+        .modal-card-head.is-question {
+            background-color: #3e8ed0;
+            color: white;
+        }
+
+        .fade-enter {
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .fade-enter-active {
+            opacity: 1;
+        }
+
+        #editor-panel {
+            background: white;
+            border-left: 1px solid #dbdbdb;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        /* Transitions */
+        .view-content {
+            opacity: 0;
+            animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.98) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* Modal Centering & Polish */
+        .modal-card {
+            margin: 0 auto;
+            max-width: 500px;
+            max-height: 90vh;
+            border-radius: 12px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+        
+        /* Vertical Centering Hack for Bulma Modals */
+        .modal-content, .modal-card {
+            top: 50%;
+            transform: translateY(-50%);
+            position: absolute;
+            left: 0; 
+            right: 0;
+        }
+        
+        /* Reset relative positioning for normal flow if needed, but absolute centering is requested */
+        .modal {
+            display: none; /* Bulma default */
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.is-active {
+            display: flex;
+        }
+
+        .modal-card-head {
+            border-bottom: 1px solid #f0f0f0;
+            background: #fff;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+        }
+        .modal-card-foot {
+            border-top: none;
+            background: #fff;
+            padding-top: 10px;
+            padding-bottom: 20px;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="full-height">
+        <!-- Navigation -->
+        <nav class="navbar is-white shadow-sm" role="navigation" aria-label="main navigation">
+            <div class="navbar-brand">
+                <a class="navbar-item brand-text" href="#" onclick="App.goHome()">
+                    <span class="icon brand-icon">
+                        <i class="fas fa-play-circle"></i>
+                    </span>
+                    <span>QuestionThis</span>
+                </a>
+            </div>
+            <div class="navbar-menu">
+                <div class="navbar-end">
+                    <div class="navbar-item">
+                        <div class="buttons">
+                            <button class="button is-primary" id="btn-create-nav" onclick="App.startEditor()">
+                                <strong>Create Lesson</strong>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <div class="main-content section">
+            <div class="container" id="app-root">
+                <!-- Views will be injected here via JS -->
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="content has-text-centered">
+                <p>
+                    <strong>Question This</strong> | Serverless Video Learning
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+    <div id="question-modal" class="modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head is-question">
+                <p class="modal-card-title" id="q-modal-title">Question</p>
+            </header>
+            <section class="modal-card-body" id="q-modal-body">
+                <!-- Question Content -->
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button is-success" id="q-modal-submit">Submit Answer</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- System Modal (Alerts/Confirms) -->
+    <div id="system-modal" class="modal">
+        <div class="modal-background" onclick="App.UI.closeModal()"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title has-text-weight-bold" id="sys-modal-title">Notification</p>
+                <button class="delete" aria-label="close" onclick="App.UI.closeModal()"></button>
+            </header>
+            <section class="modal-card-body">
+                <p id="sys-modal-message" class="is-size-5">Message goes here...</p>
+            </section>
+            <footer class="modal-card-foot is-justify-content-flex-end">
+                <button class="button" id="sys-modal-cancel" onclick="App.UI.closeModal()">Cancel</button>
+                <button class="button is-primary" id="sys-modal-confirm">OK</button>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Namespace: QT_APP
+         */
+        const CONSTANTS = {
+            STORAGE_PREFIX: 'QT_APP_',
+            POLL_INTERVAL: 250
+        };
+
+        // --- Data Persistence ---
+        const Storage = {
+            getDrafts: () => JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS') || '[]'),
+            saveDraft: (draft) => {
+                const drafts = Storage.getDrafts();
+                const existingIndex = drafts.findIndex(d => d.id === draft.id);
+                draft.lastModified = Date.now();
+                if (existingIndex >= 0) drafts[existingIndex] = draft;
+                else drafts.push(draft);
+                localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS', JSON.stringify(drafts));
+            },
+            deleteDraft: (id) => {
+                const drafts = Storage.getDrafts().filter(d => d.id !== id);
+                localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'TEACHER_DRAFTS', JSON.stringify(drafts));
+            },
+            // Student Progress: { [lessonId]: { answeredIds: [], time: 0, lastAccessed: timestamp } }
+            getProgress: (lessonId) => {
+                const all = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
+                return all[lessonId] || null;
+            },
+            saveProgress: (lessonId, data) => {
+                const all = JSON.parse(localStorage.getItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS') || '{}');
+                all[lessonId] = { ...all[lessonId], ...data, lastAccessed: Date.now() };
+                localStorage.setItem(CONSTANTS.STORAGE_PREFIX + 'STUDENT_PROGRESS', JSON.stringify(all));
+            }
+        };
+
+        // --- Video Manager Stub ---
+        class VideoManager {
+            constructor(containerId, url, onReady, onStateChange) {
+                this.containerId = containerId;
+                this.url = url;
+                this.type = this.detectType(url);
+                this.videoId = this.parseId(url);
+                this.player = null;
+                this.onReady = onReady;
+                this.onStateChange = onStateChange; // e.g. timeupdate
+                this.init();
+            }
+
+            detectType(url) {
+                if (url.includes('youtube') || url.includes('youtu.be')) return 'youtube';
+                if (url.includes('vimeo')) return 'vimeo';
+                return 'unknown';
+            }
+
+            parseId(url) {
+                // Basic parsing logic (enhance regex for robustness later)
+                if (this.type === 'youtube') {
+                    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                    const match = url.match(regExp);
+                    return (match && match[2].length === 11) ? match[2] : null;
+                } else if (this.type === 'vimeo') {
+                    const regExp = /vimeo.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|album\/(?:\d+)\/video\/|video\/|)(\d+)(?:$|\/|\?)/;
+                    const match = url.match(regExp);
+                    return match ? match[1] : null;
+                }
+                return null;
+            }
+
+            init() {
+                document.getElementById(this.containerId).innerHTML = ''; // Clear container
+                if (this.type === 'youtube') this.initYouTube();
+                else if (this.type === 'vimeo') this.initVimeo();
+            }
+
+            initYouTube() {
+                // Assumes YT API is loaded
+                const playerVars = { 
+                    'playsinline': 1, 
+                    'controls': 0, 
+                    'disablekb': 1, 
+                    'rel': 0 
+                };
+
+                // Only set origin if we are on a server (http/https) to avoid Error 153 on file://
+                if (window.location.protocol.startsWith('http')) {
+                    playerVars.origin = window.location.origin;
+                }
+
+                this.player = new YT.Player(this.containerId, {
+                    height: '100%',
+                    width: '100%',
+                    videoId: this.videoId,
+                    playerVars: playerVars,
+                    events: {
+                        'onReady': () => this.onReady(),
+                        'onStateChange': (e) => {
+                            if (e.data === YT.PlayerState.ENDED) {
+                                this.onStateChange({ status: 'ended' });
+                            }
+                        },
+                        'onError': (e) => {
+                            console.error('YT Error:', e.data);
+                            if(e.data === 150 || e.data === 101 || e.data === 153) {
+                                alert('YouTube Player Error ' + e.data + '. \n\nIf you are opening this file directly (file://), YouTube often blocks playback. \n\nPlease try running a local server (e.g. "python3 -m http.server") or using a different video.');
+                            }
+                        }
+                    }
+                });
+                // Mocking polling for timeupdate as YT doesn't have a specific event for it
+                this.pollInterval = setInterval(() => {
+                    if (this.player && this.player.getCurrentTime) {
+                         this.onStateChange({ time: this.player.getCurrentTime(), status: 'playing' });
+                    }
+                }, CONSTANTS.POLL_INTERVAL);
+            }
+
+            initVimeo() {
+                const options = { id: this.videoId, controls: false }; // controls false for strict
+                this.player = new Vimeo.Player(this.containerId, options);
+                this.player.on('loaded', () => this.onReady());
+                this.player.on('timeupdate', (data) => this.onStateChange({ time: data.seconds, status: 'playing' }));
+                this.player.on('ended', () => this.onStateChange({ status: 'ended' }));
+            }
+
+            getCurrentTime() {
+                // Wrapper
+                if (this.type === 'youtube' && this.player.getCurrentTime) return this.player.getCurrentTime();
+                // Vimeo is async, this is a simplified sync wrapper stub, might need async handling in real implementation
+                return 0; 
+            }
+
+            seekTo(seconds) {
+                if (this.type === 'youtube') this.player.seekTo(seconds, true);
+                else if (this.type === 'vimeo') this.player.setCurrentTime(seconds);
+            }
+
+            play() {
+                if (this.type === 'youtube') this.player.playVideo();
+                else if (this.type === 'vimeo') this.player.play();
+            }
+
+            pause() {
+                if (this.type === 'youtube') this.player.pauseVideo();
+                else if (this.type === 'vimeo') this.player.pause();
+            }
+        }
+
+        // --- Application Logic ---
+        const App = {
+            currentLesson: null,
+            videoManager: null,
+
+            UI: {
+                // Generic Modal Handler
+                showModal: (message, options = {}) => {
+                    const title = options.title || 'Notification';
+                    const confirmText = options.confirmText || 'OK';
+                    const showCancel = options.showCancel || false;
+                    const onConfirm = options.onConfirm || (() => App.UI.closeModal());
+                    
+                    document.getElementById('sys-modal-title').innerText = title;
+                    document.getElementById('sys-modal-message').innerHTML = message; // Allow HTML
+                    
+                    const confirmBtn = document.getElementById('sys-modal-confirm');
+                    confirmBtn.innerText = confirmText;
+                    confirmBtn.className = `button ${options.confirmClass || 'is-primary'}`;
+                    // Remove old listeners to prevent stacking
+                    const newConfirm = confirmBtn.cloneNode(true);
+                    confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+                    
+                    newConfirm.onclick = () => {
+                        onConfirm();
+                        App.UI.closeModal();
+                    };
+
+                    const cancelBtn = document.getElementById('sys-modal-cancel');
+                    if (showCancel) {
+                        cancelBtn.classList.remove('is-hidden');
+                    } else {
+                        cancelBtn.classList.add('is-hidden');
+                    }
+
+                    document.getElementById('system-modal').classList.add('is-active');
+                },
+
+                closeModal: () => {
+                    document.getElementById('system-modal').classList.remove('is-active');
+                },
+
+                alert: (msg, title) => {
+                    App.UI.showModal(msg, { title: title });
+                },
+
+                confirm: (msg, onConfirm, title) => {
+                    App.UI.showModal(msg, {
+                        title: title || 'Confirmation',
+                        showCancel: true,
+                        confirmText: 'Yes',
+                        onConfirm: onConfirm
+                    });
+                }
+            },
+
+            // Helper for smooth transitions
+            renderView: (html) => {
+                const root = document.getElementById('app-root');
+                // Wrap content in transition div
+                root.innerHTML = `<div class="view-content">${html}</div>`;
+            },
+
+            init: () => {
+                // Check URL Hash for shared lesson
+                const hash = window.location.hash;
+                if (hash && hash.includes('data=')) {
+                    App.loadStudentMode(hash);
+                } else if (hash && hash.includes('import=')) {
+                    App.importTemplate(hash);
+                } else if (hash === '#edit') {
+                    // If no current lesson, redirect to projects or landing
+                    if (!App.currentLesson) App.goHome();
+                    else App.startEditor(true); // true = resume existing object
+                } else if (hash === '#projects') {
+                    App.renderProjects();
+                } else {
+                    App.renderLanding();
+                }
+            },
+
+            goHome: () => {
+                const drafts = Storage.getDrafts();
+                if (drafts.length > 0) {
+                    window.location.hash = 'projects';
+                    App.renderProjects();
+                } else {
+                    window.location.hash = '';
+                    App.renderLanding();
+                }
+            },
+
+            renderLanding: () => {
+                const hasDrafts = Storage.getDrafts().length > 0;
+                
+                const html = `
+                    <section class="hero is-medium">
+                        <div class="hero-body pt-2">
+                            <div class="columns is-centered has-text-centered">
+                                <div class="column is-8">
+                                    <p class="title is-spaced is-1">
+                                        Transform Passive Viewing into <span class="has-text-info">Active Learning</span>.
+                                    </p>
+                                    <p class="subtitle is-4 has-text-grey">
+                                        The simplest way to create interactive video lessons. Zero setup, no accounts required.
+                                    </p>
+                                    <div class="buttons is-centered">
+                                        <button class="button is-primary is-medium is-rounded shadow px-6" onclick="App.startEditor()">
+                                            <span class="icon"><i class="fas fa-pencil-alt"></i></span>
+                                            <span>Start Creating</span>
+                                        </button>
+                                        ${hasDrafts ? `
+                                            <button class="button is-info is-light is-medium is-rounded px-6" onclick="App.goHome()">
+                                                <span class="icon"><i class="fas fa-folder-open"></i></span>
+                                                <span>My Projects</span>
+                                            </button>
+                                        ` : `
+                                            <button class="button is-light is-medium is-rounded px-6" onclick="document.getElementById('features').scrollIntoView({behavior: 'smooth'})">
+                                                <span>Learn More</span>
+                                            </button>
+                                        `}
+                                    </div>
+                                    <p class="help is-italic mt-5">
+                                        <i class="fas fa-check-circle has-text-success"></i> Works with YouTube & Vimeo
+                                        <span class="ml-4"><i class="fas fa-check-circle has-text-success"></i> Free & Open Source</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="features" class="section">
+                        <div class="container has-text-centered mb-6">
+                            <h2 class="title is-3">How It Works</h2>
+                            <p class="subtitle is-5 has-text-grey">Create a lesson in 3 simple steps.</p>
+                        </div>
+                        <div class="columns is-centered has-text-centered">
+                            <div class="column is-4">
+                                <div class="box h-100">
+                                    <span class="icon is-large has-text-info mb-3"><i class="fas fa-3x fa-video"></i></span>
+                                    <h3 class="title is-5">1. Load Video</h3>
+                                    <p>Paste any YouTube or Vimeo URL. We'll load it instantly for you to edit.</p>
+                                </div>
+                            </div>
+                            <div class="column is-4">
+                                <div class="box h-100">
+                                    <span class="icon is-large has-text-success mb-3"><i class="fas fa-3x fa-list-ul"></i></span>
+                                    <h3 class="title is-5">2. Add Questions</h3>
+                                    <p>Pause at any moment and insert Multiple Choice questions, Open Response prompts, or Notes.</p>
+                                </div>
+                            </div>
+                            <div class="column is-4">
+                                <div class="box h-100">
+                                    <span class="icon is-large has-text-warning mb-3"><i class="fas fa-3x fa-share-alt"></i></span>
+                                    <h3 class="title is-5">3. Share Link</h3>
+                                    <p>We generate a unique link containing your entire lesson. Send it to students—no login needed!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="section has-background-white-ter" style="border-radius: 12px;">
+                        <div class="container">
+                            <div class="columns">
+                                <div class="column is-4">
+                                    <h2 class="title is-3">Frequently Asked Questions</h2>
+                                    <p class="subtitle is-5">Everything you need to know.</p>
+                                </div>
+                                <div class="column is-8">
+                                    <div class="content">
+                                        <h4 class="title is-6 mb-2"><i class="fas fa-angle-right"></i> Do students need an account?</h4>
+                                        <p class="mb-4 pl-4">No. <strong>QuestionThis</strong> is designed to be frictionless. Students simply click your link, watch the video, answer questions, and download a report at the end.</p>
+                                        
+                                        <h4 class="title is-6 mb-2"><i class="fas fa-angle-right"></i> Where is the data stored?</h4>
+                                        <p class="mb-4 pl-4">All lesson data is compressed and stored directly inside the <strong>URL link</strong> you share. Student answers are stored locally in their browser until they download their report.</p>
+
+                                        <h4 class="title is-6 mb-2"><i class="fas fa-angle-right"></i> Can I see student results?</h4>
+                                        <p class="mb-4 pl-4">Yes, but they must send them to you. At the end of a lesson, students are prompted to generate a <strong>CSV Report</strong> which they can email or upload to your LMS.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                `;
+                App.renderView(html);
+            },
+
+            importTemplate: (hash) => {
+                const encoded = hash.split('import=')[1];
+                try {
+                    const json = LZString.decompressFromEncodedURIComponent(encoded);
+                    const lessonData = JSON.parse(json);
+                    // Reset ID to create a copy
+                    lessonData.id = Date.now();
+                    lessonData.title = lessonData.title + ' (Copy)';
+                    Storage.saveDraft(lessonData);
+                    App.UI.alert('Project imported successfully!', 'Import Complete');
+                    App.goHome();
+                } catch (e) {
+                    App.UI.alert('Invalid Import Link', 'Error');
+                    App.goHome();
+                }
+            },
+
+            renderProjects: () => {
+                const drafts = Storage.getDrafts();
+                
+                let html = `
+                    <div class="container is-max-desktop">
+                        <div class="level">
+                            <div class="level-left">
+                                <h1 class="title is-3">My Projects</h1>
+                            </div>
+                            <div class="level-right">
+                                <button class="button is-primary" onclick="App.startEditor()">
+                                    <span class="icon"><i class="fas fa-plus"></i></span>
+                                    <span>New Project</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        ${drafts.length === 0 ? `
+                            <div class="notification is-info is-light">
+                                You haven't created any projects yet. Click "New Project" to get started!
+                            </div>
+                        ` : `
+                            <div class="box">
+                                <div class="table-container">
+                                    <table class="table is-fullwidth is-hoverable">
+                                        <thead>
+                                            <tr>
+                                                <th>Title</th>
+                                                <th>Questions</th>
+                                                <th>Last Modified</th>
+                                                <th class="has-text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${drafts.map(d => `
+                                                <tr>
+                                                    <td>
+                                                        <a class="has-text-weight-bold" onclick="App.loadProject(${d.id})">${d.title || 'Untitled Project'}</a>
+                                                        <p class="is-size-7 has-text-grey is-family-monospace text-truncate" style="max-width: 200px;">${d.videoUrl}</p>
+                                                    </td>
+                                                    <td><span class="tag is-light">${d.questions.length}</span></td>
+                                                    <td class="is-size-7">${new Date(d.lastModified || d.id).toLocaleDateString()}</td>
+                                                    <td class="has-text-right">
+                                                        <div class="buttons is-right">
+                                                            <button class="button is-small is-info is-light" title="Edit" onclick="App.loadProject(${d.id})">
+                                                                <span class="icon"><i class="fas fa-edit"></i></span>
+                                                            </button>
+                                                            <button class="button is-small is-warning is-light" title="Share Template (for Teachers)" onclick="App.shareProject(${d.id}, 'template')">
+                                                                <span class="icon"><i class="fas fa-file-export"></i></span>
+                                                            </button>
+                                                            <button class="button is-small is-success is-light" title="Share Assignment (for Students)" onclick="App.shareProject(${d.id}, 'assignment')">
+                                                                <span class="icon"><i class="fas fa-share-alt"></i></span>
+                                                            </button>
+                                                            <button class="button is-small is-danger is-light" title="Delete" onclick="App.deleteProject(${d.id})">
+                                                                <span class="icon"><i class="fas fa-trash"></i></span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        `}
+                    </div>
+
+                    <!-- Share Modal -->
+                    <div id="share-modal" class="modal">
+                        <div class="modal-background" onclick="document.getElementById('share-modal').classList.remove('is-active')"></div>
+                        <div class="modal-card">
+                            <header class="modal-card-head">
+                                <p class="modal-card-title">Share Project</p>
+                                <button class="delete" aria-label="close" onclick="document.getElementById('share-modal').classList.remove('is-active')"></button>
+                            </header>
+                            <section class="modal-card-body">
+                                <div class="field">
+                                    <label class="label" id="share-label">Share Link</label>
+                                    <div class="control has-icons-right">
+                                        <input class="input" type="text" id="share-input" readonly>
+                                        <span class="icon is-right is-clickable" onclick="App.Editor.copyLink('share-input')">
+                                            <i class="fas fa-copy"></i>
+                                        </span>
+                                    </div>
+                                    <p class="help" id="share-help-text"></p>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                `;
+                App.renderView(html);
+            },
+
+            loadProject: (id) => {
+                const drafts = Storage.getDrafts();
+                const project = drafts.find(d => d.id === id);
+                if (project) {
+                    App.currentLesson = project;
+                    App.startEditor(true);
+                }
+            },
+
+            deleteProject: (id) => {
+                App.UI.confirm('Are you sure you want to delete this project?', () => {
+                    Storage.deleteDraft(id);
+                    App.renderProjects();
+                }, 'Delete Project');
+            },
+
+            shareProject: (id, type) => {
+                const drafts = Storage.getDrafts();
+                const project = drafts.find(d => d.id === id);
+                if (!project) return;
+
+                const json = JSON.stringify(project);
+                const compressed = LZString.compressToEncodedURIComponent(json);
+                const baseUrl = window.location.origin + window.location.pathname;
+                
+                let url, label, help;
+                if (type === 'template') {
+                    url = baseUrl + '#import=' + compressed;
+                    label = "Template Link (For Teachers)";
+                    help = "Share this link with other teachers. They can import this project into their own dashboard.";
+                } else {
+                    url = baseUrl + '#data=' + compressed;
+                    label = "Assignment Link (For Students)";
+                    help = "Share this link with your students. It opens directly in the Player.";
+                }
+
+                document.getElementById('share-input').value = url;
+                document.getElementById('share-label').innerText = label;
+                document.getElementById('share-help-text').innerText = help;
+                document.getElementById('share-modal').classList.add('is-active');
+            },
+
+            startEditor: (resume = false) => {
+                window.location.hash = 'edit';
+                
+                if (!resume) {
+                    App.currentLesson = {
+                        id: Date.now(), // New ID
+                        title: 'Untitled Lesson',
+                        videoUrl: '',
+                        questions: [],
+                        settings: { preventSkip: false, dueDate: null },
+                        lastModified: Date.now()
+                    };
+                }
+                
+                const html = `
+                    <div class="columns is-desktop" style="height: calc(100vh - 80px);">
+                        <!-- Left: Video Preview -->
+                        <div class="column is-8 is-flex is-flex-direction-column">
+                            <div class="box is-flex-shrink-0">
+                                <div class="field has-addons">
+                                    <div class="control is-expanded">
+                                        <input class="input" type="text" id="video-url-input" placeholder="Paste YouTube or Vimeo URL" value="${App.currentLesson.videoUrl}">
+                                    </div>
+                                    <div class="control">
+                                        <button class="button is-info" onclick="App.Editor.loadVideo()">Load Video</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="box is-flex-grow-1 is-paddingless is-clipped" style="position: relative; background: #000;">
+                                <div id="editor-video-container" class="video-container" style="height: 100%; padding-bottom: 0;">
+                                     <div class="is-flex is-align-items-center is-justify-content-center" style="height:100%; color: #888;">
+                                        <p>Load a video to start editing</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Editor Tools -->
+                        <div class="column is-4" style="height: 100%; overflow-y: auto;">
+                            <div id="editor-panel" class="box" style="height: 100%;">
+                                <div class="level is-mobile mb-2">
+                                    <div class="level-left">
+                                        <h3 class="title is-5">Lesson Builder</h3>
+                                    </div>
+                                    <div class="level-right">
+                                        <button class="button is-small is-light" onclick="App.goHome()">Exit</button>
+                                    </div>
+                                </div>
+
+                                <div class="field">
+                                    <label class="label is-small">Project Title</label>
+                                    <div class="control">
+                                        <input class="input is-small" type="text" value="${App.currentLesson.title}" onchange="App.currentLesson.title = this.value; App.Editor.saveProject(false);">
+                                    </div>
+                                </div>
+                                
+                                <div class="tabs is-small is-toggle is-fullwidth">
+                                    <ul>
+                                        <li class="is-active" data-tab="questions" onclick="App.Editor.switchTab(this, 'questions')"><a>Questions</a></li>
+                                        <li data-tab="settings" onclick="App.Editor.switchTab(this, 'settings')"><a>Settings</a></li>
+                                    </ul>
+                                </div>
+
+                                <!-- Questions Tab -->
+                                <div id="tab-questions" class="block">
+                                    <button class="button is-small is-fullwidth is-link mb-4" onclick="App.Editor.showQuestionForm()">
+                                        <span class="icon"><i class="fas fa-plus-circle"></i></span>
+                                        <span>Add Question at Current Time</span>
+                                    </button>
+
+                                    <!-- New Question Form (Hidden by default) -->
+                                    <div id="new-question-form" class="box has-background-light is-hidden">
+                                        <h4 class="subtitle is-6"><span id="form-mode">New</span> Question <span id="form-timestamp" class="tag is-dark is-pulled-right">00:00</span></h4>
+                                        <input type="hidden" id="q-edit-id">
+
+                                        <div class="field">
+                                            <label class="label is-small">Type</label>
+                                            <div class="control">
+                                                <div class="select is-small is-fullwidth">
+                                                    <select id="q-type" onchange="App.Editor.toggleOptions()">
+                                                        <option value="mc">Multiple Choice</option>
+                                                        <option value="open">Open Ended</option>
+                                                        <option value="note">Note / Tip</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="field">
+                                            <label class="label is-small">Question Text</label>
+                                            <div class="control">
+                                                <textarea class="textarea is-small" id="q-text" rows="2" placeholder="Enter your question or note here..."></textarea>
+                                            </div>
+                                        </div>
+
+                                        <!-- Multiple Choice Options -->
+                                        <div id="q-options-container">
+                                            <label class="label is-small">Answers (Select Correct)</label>
+                                            <div id="q-options-list">
+                                                <!-- Dynamic Inputs -->
+                                            </div>
+                                            <button class="button is-ghost is-small pl-0" onclick="App.Editor.addOptionInput()">+ Add Option</button>
+                                        </div>
+
+                                        <div class="field is-grouped is-grouped-right mt-3">
+                                            <div class="control">
+                                                <button class="button is-small is-text" onclick="App.Editor.cancelQuestion()">Cancel</button>
+                                            </div>
+                                            <div class="control">
+                                                <button class="button is-small is-success" onclick="App.Editor.saveQuestion()">Save</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="question-list" class="mt-4">
+                                        <!-- Questions List -->
+                                    </div>
+                                </div>
+
+                                <!-- Settings Tab -->
+                                <div id="tab-settings" class="block is-hidden">
+                                    <div class="field">
+                                        <label class="checkbox">
+                                            <input type="checkbox" onchange="App.currentLesson.settings.preventSkip = this.checked" ${App.currentLesson.settings.preventSkip ? 'checked' : ''}>
+                                            Prevent Skipping
+                                        </label>
+                                        <p class="help">Students cannot fast-forward past what they've watched.</p>
+                                    </div>
+                                </div>
+
+                                <hr class="mt-auto">
+                                <button class="button is-info is-light is-fullwidth mb-2" onclick="App.Editor.saveProject(true)">
+                                    <span class="icon"><i class="fas fa-save"></i></span>
+                                    <span>Save Project</span>
+                                </button>
+                                <button class="button is-primary is-fullwidth" onclick="App.Editor.shareLesson()">
+                                    <span class="icon"><i class="fas fa-share-alt"></i></span>
+                                    <span>Share Assignment</span>
+                                </button>
+                                <div id="share-result" class="field has-addons mt-2 is-hidden">
+                                    <div class="control is-expanded">
+                                        <input class="input is-small" type="text" id="share-url" readonly>
+                                    </div>
+                                    <div class="control">
+                                        <button class="button is-small is-info" onclick="App.Editor.copyLink('share-url')">Copy</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                App.renderView(html);
+                
+                // Load video if URL exists (resume mode)
+                if (App.currentLesson.videoUrl) {
+                    App.Editor.loadVideo();
+                    App.Editor.renderQuestionList();
+                }
+
+                App.Editor.resetForm();
+            },
+
+            Editor: {
+                tempTime: 0,
+                
+                switchTab: (el, tabName) => {
+                    document.querySelectorAll('.tabs li').forEach(li => li.classList.remove('is-active'));
+                    el.closest('li').classList.add('is-active');
+                    document.getElementById('tab-questions').classList.add('is-hidden');
+                    document.getElementById('tab-settings').classList.add('is-hidden');
+                    document.getElementById('tab-' + tabName).classList.remove('is-hidden');
+                },
+
+                loadVideo: () => {
+                    const url = document.getElementById('video-url-input').value;
+                    if(!url) return;
+                    App.currentLesson.videoUrl = url;
+                    App.videoManager = new VideoManager('editor-video-container', url, 
+                        () => console.log('Video Ready'), 
+                        (state) => { /* Update time display if needed */ }
+                    );
+                },
+
+                formatTime: (seconds) => {
+                    const date = new Date(0);
+                    date.setSeconds(seconds);
+                    return date.toISOString().substr(14, 5);
+                },
+
+                showQuestionForm: (existingId = null) => {
+                    if (!App.videoManager && !existingId) {
+                        alert("Please load a video first.");
+                        return;
+                    }
+                    
+                    document.getElementById('new-question-form').classList.remove('is-hidden');
+                    
+                    if (existingId) {
+                        // EDIT MODE
+                        const q = App.currentLesson.questions.find(x => x.id === existingId);
+                        if (!q) return;
+
+                        App.Editor.tempTime = q.time;
+                        document.getElementById('form-mode').innerText = 'Edit';
+                        document.getElementById('q-edit-id').value = q.id;
+                        document.getElementById('form-timestamp').innerText = App.Editor.formatTime(q.time);
+                        document.getElementById('q-type').value = q.type;
+                        document.getElementById('q-text').value = q.text;
+
+                        App.Editor.toggleOptions();
+                        const list = document.getElementById('q-options-list');
+                        list.innerHTML = ''; // Clear
+                        if (q.type === 'mc') {
+                            q.options.forEach((opt, idx) => {
+                                App.Editor.addOptionInput(opt, idx === q.correctIndex);
+                            });
+                        }
+                    } else {
+                        // NEW MODE
+                        // Capture current time
+                        const time = App.videoManager.getCurrentTime();
+                        App.Editor.tempTime = time;
+                        document.getElementById('form-mode').innerText = 'New';
+                        document.getElementById('q-edit-id').value = '';
+                        document.getElementById('form-timestamp').innerText = App.Editor.formatTime(time);
+                        App.Editor.resetForm();
+                        // Pause video while editing
+                        App.videoManager.pause();
+                    }
+                },
+
+                cancelQuestion: () => {
+                    document.getElementById('new-question-form').classList.add('is-hidden');
+                },
+
+                resetForm: () => {
+                    document.getElementById('q-type').value = 'mc';
+                    document.getElementById('q-text').value = '';
+                    document.getElementById('q-options-list').innerHTML = '';
+                    App.Editor.addOptionInput(); 
+                    App.Editor.addOptionInput(); 
+                    App.Editor.toggleOptions();
+                },
+
+                toggleOptions: () => {
+                    const type = document.getElementById('q-type').value;
+                    const container = document.getElementById('q-options-container');
+                    if (type === 'mc') container.classList.remove('is-hidden');
+                    else container.classList.add('is-hidden');
+                },
+
+                addOptionInput: (val = '', isCorrect = false) => {
+                    const list = document.getElementById('q-options-list');
+                    const idx = list.children.length;
+                    const div = document.createElement('div');
+                    div.className = 'field has-addons mb-2';
+                    div.innerHTML = `
+                        <div class="control">
+                            <span class="button is-static is-small">
+                                <input type="radio" name="correct-answer" value="${idx}" ${isCorrect || (idx === 0 && !val) ? 'checked' : ''}>
+                            </span>
+                        </div>
+                        <div class="control is-expanded">
+                            <input class="input is-small option-input" type="text" placeholder="Option ${idx + 1}" value="${val}">
+                        </div>
+                        <div class="control">
+                            <button class="button is-small is-danger is-light" onclick="this.closest('.field').remove()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                },
+
+                saveQuestion: () => {
+                    const type = document.getElementById('q-type').value;
+                    const text = document.getElementById('q-text').value;
+                    const editId = document.getElementById('q-edit-id').value;
+                    
+                    if (!text) return alert('Question text is required');
+
+                    const qData = {
+                        id: editId || Date.now().toString(36),
+                        time: App.Editor.tempTime,
+                        type: type,
+                        text: text,
+                        options: [],
+                        correctIndex: null
+                    };
+
+                    if (type === 'mc') {
+                        const inputs = document.querySelectorAll('.option-input');
+                        const radios = document.getElementsByName('correct-answer');
+                        let valid = false;
+                        inputs.forEach((input, index) => {
+                            if (input.value.trim()) {
+                                qData.options.push(input.value.trim());
+                                // Determine if this index was checked. 
+                                // We need to map the visual index back to the data index.
+                                // Actually, radios are by Name, so browser handles one checked.
+                                // We just need to find WHICH radio is checked.
+                            }
+                        });
+                        
+                        // Find checked radio value
+                        let checkedVal = -1;
+                        for (let i = 0; i < radios.length; i++) {
+                            if (radios[i].checked) {
+                                // The value of the radio corresponds to its original position in the DOM list
+                                // We need to be careful if items were deleted.
+                                // Simplification: Just rebuild options and take the one that is checked relative to the inputs list.
+                                checkedVal = i; 
+                                break;
+                            }
+                        }
+                        
+                        // Re-validate correct index against filtered options
+                        // This logic is tricky if user deletes option 1 but checks option 2.
+                        // Better approach: Iterate inputs and check corresponding radio.
+                        qData.options = [];
+                        let newCorrectIndex = 0;
+                        let currentOptIndex = 0;
+                        
+                        inputs.forEach((input, index) => {
+                            if (input.value.trim()) {
+                                qData.options.push(input.value.trim());
+                                if (radios[index].checked) newCorrectIndex = currentOptIndex;
+                                currentOptIndex++;
+                            }
+                        });
+                        qData.correctIndex = newCorrectIndex;
+
+                        if (qData.options.length < 2) return alert('Add at least 2 valid options for Multiple Choice.');
+                    }
+
+                    if (editId) {
+                        const idx = App.currentLesson.questions.findIndex(q => q.id === editId);
+                        if (idx >= 0) App.currentLesson.questions[idx] = qData;
+                    } else {
+                        App.currentLesson.questions.push(qData);
+                    }
+                    
+                    App.currentLesson.questions.sort((a, b) => a.time - b.time); // Keep sorted by time
+                    
+                    App.Editor.renderQuestionList();
+                    App.Editor.cancelQuestion();
+                    App.Editor.saveProject(false); // Auto-save
+                },
+
+                renderQuestionList: () => {
+                    const list = document.getElementById('question-list');
+                    list.innerHTML = App.currentLesson.questions.map((q, i) => `
+                        <div class="card mb-2" style="cursor: pointer;" onclick="App.Editor.showQuestionForm('${q.id}')">
+                            <div class="card-content p-3">
+                                <div class="media">
+                                    <div class="media-left">
+                                        <span class="tag is-dark">${App.Editor.formatTime(q.time)}</span>
+                                    </div>
+                                    <div class="media-content">
+                                        <p class="title is-6 mb-1">${q.text}</p>
+                                        <p class="subtitle is-7 has-text-grey is-uppercase">
+                                            ${q.type} <span class="icon is-small ml-1"><i class="fas fa-pencil-alt"></i></span>
+                                        </p>
+                                    </div>
+                                    <div class="media-right">
+                                        <button class="delete" onclick="event.stopPropagation(); App.Editor.deleteQuestion('${q.id}')"></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                },
+
+                deleteQuestion: (id) => {
+                    if(!confirm('Delete this question?')) return;
+                    App.currentLesson.questions = App.currentLesson.questions.filter(q => q.id !== id);
+                    App.Editor.renderQuestionList();
+                    App.Editor.saveProject(false);
+                },
+
+                saveProject: (showAlert = true) => {
+                     Storage.saveDraft(App.currentLesson);
+                     if (showAlert) alert('Project saved to "My Projects"!');
+                },
+
+                shareLesson: () => {
+                    if (!App.currentLesson.videoUrl) return alert('No video loaded!');
+                    // Compress
+                    const json = JSON.stringify(App.currentLesson);
+                    const compressed = LZString.compressToEncodedURIComponent(json);
+                    const fullUrl = window.location.origin + window.location.pathname + '#data=' + compressed;
+                    
+                    document.getElementById('share-result').classList.remove('is-hidden');
+                    document.getElementById('share-url').value = fullUrl;
+                    App.Editor.saveProject(false);
+                },
+
+                copyLink: (id) => {
+                    const copyText = document.getElementById(id);
+                    copyText.select();
+                    document.execCommand("copy");
+                    alert("Link copied to clipboard!");
+                }
+            },
+
+            loadStudentMode: (hash) => {
+                const encoded = hash.split('data=')[1];
+                if (!encoded) return;
+                
+                try {
+                    const json = LZString.decompressFromEncodedURIComponent(encoded);
+                    const lessonData = JSON.parse(json);
+                    
+                    // Initialize Player State
+                    const savedProgress = App.Player.init(lessonData);
+
+                    const html = `
+                        <div class="container is-max-widescreen">
+                            <div class="columns is-centered">
+                                <div class="column is-10">
+                                    <div class="box p-0 overflow-hidden" style="border-radius: 8px;">
+                                        <div id="student-video-container" class="video-container"></div>
+                                    </div>
+                                    
+                                    <div class="level is-mobile mt-4">
+                                        <div class="level-left">
+                                            <div>
+                                                <h1 class="title is-5 mb-1">${lessonData.title || 'Lesson Player'}</h1>
+                                                <p class="subtitle is-7 has-text-grey" id="progress-text">0 / 0 Questions Answered</p>
+                                            </div>
+                                        </div>
+                                        <div class="level-right">
+                                            <button class="button is-small is-light" onclick="App.goHome()">
+                                                <span class="icon"><i class="fas fa-home"></i></span>
+                                                <span>Exit</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    App.renderView(html);
+
+                    App.videoManager = new VideoManager('student-video-container', lessonData.videoUrl,
+                        () => {
+                            console.log('Student Player Ready');
+                            if (savedProgress && savedProgress.time > 5) {
+                                App.UI.confirm('Resume from where you left off?', () => {
+                                    App.videoManager.seekTo(savedProgress.time);
+                                }, 'Resume Lesson');
+                            }
+                        },
+                        (state) => App.Player.onStateChange(state)
+                    );
+                } catch (e) {
+                    console.error('Failed to load lesson', e);
+                    App.UI.alert('Invalid or Corrupted Lesson URL', 'Error');
+                    App.goHome();
+                }
+            },
+
+            Player: {
+                lessonData: null,
+                answeredIds: new Set(),
+                activeQuestionId: null,
+                answers: {}, // Stores student responses
+                lastSave: 0,
+                
+                init: (data) => {
+                    App.Player.lessonData = data;
+                    App.Player.answeredIds = new Set();
+                    App.Player.answers = {};
+                    App.Player.activeQuestionId = null;
+                    
+                    // Load Progress
+                    const progress = Storage.getProgress(data.id);
+                    if (progress) {
+                        if (progress.answeredIds) App.Player.answeredIds = new Set(progress.answeredIds);
+                        if (progress.answers) App.Player.answers = progress.answers;
+                    }
+
+                    App.Player.updateProgressUI();
+                    return progress;
+                },
+
+                updateProgressUI: () => {
+                    const total = App.Player.lessonData.questions.length;
+                    const answered = App.Player.answeredIds.size;
+                    const el = document.getElementById('progress-text');
+                    if(el) el.innerText = `${answered} / ${total} Questions Completed`;
+                },
+
+                onStateChange: (state) => {
+                    if (state.status === 'ended') {
+                        App.Player.finishLesson();
+                        return;
+                    }
+                    if (state.time !== undefined) {
+                        App.Player.checkGatekeeper(state.time);
+                        
+                        // Auto-save every 5 seconds
+                        const now = Date.now();
+                        if (now - App.Player.lastSave > 5000) {
+                            App.Player.saveProgress(state.time);
+                            App.Player.lastSave = now;
+                        }
+                    }
+                },
+                
+                saveProgress: (time) => {
+                    Storage.saveProgress(App.Player.lessonData.id, {
+                        answeredIds: Array.from(App.Player.answeredIds),
+                        answers: App.Player.answers,
+                        time: time
+                    });
+                },
+
+                checkGatekeeper: (currentTime) => {
+                    // Gatekeeper Logic
+                    const tolerance = 1.0; 
+                    const question = App.Player.lessonData.questions.find(q => 
+                        Math.abs(q.time - currentTime) < tolerance && 
+                        !App.Player.answeredIds.has(q.id)
+                    );
+
+                    if (question) {
+                        if (App.Player.activeQuestionId !== question.id) {
+                            console.log('Triggering Question:', question.id);
+                            App.videoManager.pause();
+                            App.Player.showQuestion(question);
+                        }
+                    }
+                },
+
+                showQuestion: (q) => {
+                    App.Player.activeQuestionId = q.id;
+                    const modal = document.getElementById('question-modal');
+                    const title = document.getElementById('q-modal-title');
+                    const body = document.getElementById('q-modal-body');
+                    const footerBtn = document.getElementById('q-modal-submit');
+
+                    modal.classList.add('is-active');
+                    title.innerText = q.type === 'note' ? 'Note' : 'Question';
+                    
+                    // Render Content based on Type
+                    let content = `<p class="title is-4">${q.text}</p>`;
+                    
+                    if (q.type === 'mc') {
+                        content += `<div class="control mt-4">`;
+                        q.options.forEach((opt, i) => {
+                            content += `
+                                <label class="radio panel-block">
+                                    <input type="radio" name="student-answer" value="${i}">
+                                    <span class="ml-2">${opt}</span>
+                                </label>
+                            `;
+                        });
+                        content += `</div><div id="feedback-msg" class="mt-3 is-hidden"></div>`;
+                        footerBtn.innerText = "Submit";
+                        footerBtn.onclick = () => App.Player.submitAnswer(q);
+                    } else if (q.type === 'open') {
+                        content += `
+                            <div class="field mt-4">
+                                <div class="control">
+                                    <textarea class="textarea" id="student-text-response" placeholder="Type your answer here..."></textarea>
+                                </div>
+                            </div>
+                        `;
+                        footerBtn.innerText = "Submit";
+                        footerBtn.onclick = () => App.Player.submitAnswer(q);
+                    } else if (q.type === 'note') {
+                        footerBtn.innerText = "Continue Watching";
+                        footerBtn.onclick = () => App.Player.markComplete(q.id);
+                    }
+
+                    body.innerHTML = content;
+                },
+
+                submitAnswer: (q) => {
+                    if (q.type === 'mc') {
+                        const selected = document.querySelector('input[name="student-answer"]:checked');
+                        if (!selected) return App.UI.alert('Please select an answer.', 'Incomplete');
+                        
+                        const val = parseInt(selected.value);
+                        const isCorrect = val === q.correctIndex;
+                        const feedback = document.getElementById('feedback-msg');
+                        
+                        // UI Feedback
+                        feedback.classList.remove('is-hidden');
+                        if (isCorrect) {
+                            feedback.innerHTML = `<span class="tag is-success is-large is-light">Correct!</span>`;
+                            // Auto continue after short delay
+                            setTimeout(() => App.Player.markComplete(q.id, { selected: val, correct: true }), 1500);
+                        } else {
+                            feedback.innerHTML = `<span class="tag is-danger is-large is-light">Incorrect. The correct answer was: ${q.options[q.correctIndex]}</span>`;
+                            document.getElementById('q-modal-submit').innerText = "Continue";
+                            document.getElementById('q-modal-submit').onclick = () => App.Player.markComplete(q.id, { selected: val, correct: false });
+                        }
+                    } else if (q.type === 'open') {
+                        const text = document.getElementById('student-text-response').value;
+                        if (!text.trim()) return App.UI.alert('Please write something.', 'Incomplete');
+                        App.Player.markComplete(q.id, { text: text });
+                    }
+                },
+
+                markComplete: (qId, answerData = null) => {
+                    App.Player.answeredIds.add(qId);
+                    if (answerData) App.Player.answers[qId] = answerData;
+                    App.Player.saveProgress(App.videoManager.getCurrentTime());
+                    
+                    // Close Modal
+                    document.getElementById('question-modal').classList.remove('is-active');
+                    App.Player.activeQuestionId = null;
+                    App.Player.updateProgressUI();
+                    
+                    // Resume Video
+                    App.videoManager.play();
+                },
+
+                finishLesson: () => {
+                     const root = document.getElementById('app-root');
+                     // Calculate Score
+                     let score = 0;
+                     let totalMc = 0;
+                     App.Player.lessonData.questions.forEach(q => {
+                        if (q.type === 'mc') {
+                            totalMc++;
+                            const ans = App.Player.answers[q.id];
+                            if(ans && ans.correct) score++;
+                        }
+                     });
+                     const percentage = totalMc === 0 ? 100 : Math.round((score / totalMc) * 100);
+
+                     const html = `
+                        <div class="container is-max-desktop">
+                            <div class="box has-text-centered section">
+                                <h1 class="title is-2 has-text-success">Lesson Complete!</h1>
+                                <p class="subtitle">You have reached the end of the video.</p>
+                                
+                                <div class="columns is-centered mt-5">
+                                    <div class="column is-6">
+                                        <div class="notification is-primary is-light">
+                                            <p class="heading">Multiple Choice Score</p>
+                                            <p class="title">${score} / ${totalMc}</p>
+                                            <p class="subtitle is-6">(${percentage}%)</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="field has-addons has-addons-centered mt-5">
+                                    <div class="control">
+                                        <input class="input" type="text" id="student-name-input" placeholder="Enter Full Name">
+                                    </div>
+                                    <div class="control">
+                                        <button class="button is-info" onclick="App.Player.downloadReport()">
+                                            <span class="icon"><i class="fas fa-file-csv"></i></span>
+                                            <span>Download Report</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <p class="help">Download the report to submit to your teacher.</p>
+
+                                <button class="button is-ghost mt-6" onclick="App.goHome()">Back to Home</button>
+                            </div>
+                        </div>
+                     `;
+                     App.renderView(html);
+                },
+
+                downloadReport: () => {
+                    const name = document.getElementById('student-name-input').value;
+                    if (!name) return App.UI.alert('Please enter your name.', 'Required');
+                    
+                    let csv = `Student Name, ${name}\nDate, ${new Date().toLocaleDateString()}\n\nQuestion, Type, Answer, Result\n`;
+                    
+                    App.Player.lessonData.questions.forEach(q => {
+                        const ans = App.Player.answers[q.id] || {};
+                        let answerText = '';
+                        let result = '';
+                        
+                        if (q.type === 'mc') {
+                            answerText = q.options[ans.selected] || 'No Answer';
+                            result = ans.correct ? 'Correct' : 'Incorrect';
+                        } else if (q.type === 'open') {
+                            answerText = (ans.text || '').replace(/,/g, ' '); // simple escape
+                            result = 'Submitted';
+                        } else {
+                            answerText = 'N/A';
+                            result = 'Read';
+                        }
+                        
+                        csv += `"${q.text.replace(/"/g, '""')}", ${q.type}, "${answerText}", ${result}\n`;
+                    });
+
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.setAttribute('hidden', '');
+                    a.setAttribute('href', url);
+                    a.setAttribute('download', `${name}_Result.csv`);
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }
+            }
+        };
+
+        // Initialize App on Load
+        window.addEventListener('DOMContentLoaded', App.init);
+
+    </script>
+</body>
+</html>
