@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Question This</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     
     <!-- Libraries -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
@@ -206,6 +207,8 @@
         .modal-card-body .radio.panel-block {
             display: flex;
             align-items: center;
+            justify-content: flex-start;
+            gap: 0.75rem;
         }
 
         #pending-question-indicator {
@@ -285,7 +288,7 @@
                             <label class="label" id="share-label">Share Link</label>
                             <div class="control has-icons-right">
                                 <input class="input" type="text" id="share-input" readonly>
-                                <span class="icon is-right is-clickable" onclick="App.Editor.copyLink('share-input')">
+                                <span class="icon is-right is-clickable" onclick="App.Editor.copyLink('share-input', this)">
                                     <i class="fas fa-copy"></i>
                                 </span>
                             </div>
@@ -484,6 +487,10 @@
                             'onStateChange': (e) => {
                                 if (e.data === YT.PlayerState.ENDED) {
                                     this.onStateChange({ status: 'ended' });
+                                } else if (e.data === YT.PlayerState.PLAYING) {
+                                    this.onStateChange({ status: 'playing' });
+                                } else if (e.data === YT.PlayerState.PAUSED) {
+                                    this.onStateChange({ status: 'paused' });
                                 }
                             },
                             'onError': (e) => {
@@ -497,7 +504,7 @@
                     // Mocking polling for timeupdate as YT doesn't have a specific event for it
                     this.pollInterval = setInterval(() => {
                         if (this.player && this.player.getCurrentTime) {
-                             this.onStateChange({ time: this.player.getCurrentTime(), status: 'playing' });
+                             this.onStateChange({ time: this.player.getCurrentTime() });
                         }
                     }, CONSTANTS.POLL_INTERVAL);
                 };
@@ -513,7 +520,9 @@
                 const options = { id: this.videoId, controls: this.enableControls }; // controls false for strict
                 this.player = new Vimeo.Player(this.containerId, options);
                 this.player.on('loaded', () => this.onReady());
-                this.player.on('timeupdate', (data) => this.onStateChange({ time: data.seconds, status: 'playing' }));
+                this.player.on('timeupdate', (data) => this.onStateChange({ time: data.seconds }));
+                this.player.on('play', () => this.onStateChange({ status: 'playing' }));
+                this.player.on('pause', () => this.onStateChange({ status: 'paused' }));
                 this.player.on('ended', () => this.onStateChange({ status: 'ended' }));
             }
 
@@ -1106,7 +1115,7 @@
                                         <input class="input is-small" type="text" id="share-url" readonly>
                                     </div>
                                     <div class="control">
-                                        <button class="button is-small is-info" onclick="App.Editor.copyLink('share-url')">Copy</button>
+                                        <button class="button is-small is-info" onclick="App.Editor.copyLink('share-url', this)">Copy</button>
                                     </div>
                                 </div>
                             </div>
@@ -1364,11 +1373,30 @@
                     App.Editor.saveProject(false);
                 },
 
-                copyLink: (id) => {
+                copyLink: (id, btnElement) => {
                     const copyText = document.getElementById(id);
                     copyText.select();
                     document.execCommand("copy");
-                    alert("Link copied to clipboard!");
+
+                    if (btnElement) {
+                        const icon = btnElement.querySelector('i');
+                        if (icon) {
+                            const originalClass = icon.className;
+                            icon.className = 'fas fa-check has-text-success';
+                            setTimeout(() => icon.className = originalClass, 2000);
+                        } else {
+                            // Likely a button with text
+                            const originalText = btnElement.innerText;
+                            btnElement.innerText = 'Copied!';
+                            btnElement.classList.add('is-success');
+                            setTimeout(() => {
+                                btnElement.innerText = originalText;
+                                btnElement.classList.remove('is-success');
+                            }, 2000);
+                        }
+                    } else {
+                         alert("Link copied to clipboard!");
+                    }
                 }
             },
 
@@ -1521,6 +1549,9 @@
                     if (state.status === 'playing') {
                         const icon = document.getElementById('play-icon');
                         if(icon) icon.className = 'fas fa-pause';
+                    } else if (state.status === 'paused') {
+                        const icon = document.getElementById('play-icon');
+                        if(icon) icon.className = 'fas fa-play';
                     }
 
                     if (state.time !== undefined) {
@@ -1620,10 +1651,21 @@
                 },
 
                 dismissQuestion: () => {
-                     App.Player.pendingQuestionId = App.Player.activeQuestionId;
+                     const qId = App.Player.activeQuestionId;
+                     if (qId) {
+                         const q = App.Player.lessonData.questions.find(x => x.id === qId);
+                         if (q) {
+                             // Rewind to 3 seconds before (or 0)
+                             const rewindTime = Math.max(0, q.time - 3);
+                             App.videoManager.seekTo(rewindTime);
+                             App.videoManager.pause();
+                         }
+                     }
+
                      App.Player.activeQuestionId = null;
+                     App.Player.pendingQuestionId = null;
                      document.getElementById('question-modal').classList.remove('is-active');
-                     document.getElementById('pending-question-indicator').classList.remove('is-hidden');
+                     document.getElementById('pending-question-indicator').classList.add('is-hidden');
                 },
 
                 openPendingQuestion: () => {
