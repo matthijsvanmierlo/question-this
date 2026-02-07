@@ -203,14 +203,37 @@
             box-shadow: 0 0 2px rgba(0,0,0,0.3);
         }
 
-        /* Fix alignment of MC options in modal */
-        .modal-card-body .radio.panel-block {
+        .timeline-segment {
+            position: absolute;
+            height: 8px; /* Slightly thinner than track wrapper */
+            background-color: rgba(62, 142, 208, 0.5);
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 2;
+            border-radius: 4px;
+        }
+
+        /* Custom Answer Option Styling */
+        .answer-option {
             display: flex;
-            align-items: center;
-            justify-content: flex-start;
+            align-items: flex-start; /* Better for multi-line text */
             gap: 0.75rem;
             width: 100%;
             margin-bottom: 0.5rem;
+            padding: 0.75rem 1rem;
+            border: 1px solid #dbdbdb;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .answer-option:hover {
+            background-color: #f5f5f5;
+        }
+        .answer-option input {
+            margin-top: 0.3rem; /* Aligns with first line of text */
+            flex-shrink: 0;
+            transform: scale(1.2); /* Slightly larger target */
         }
 
         #pending-question-indicator {
@@ -676,6 +699,9 @@
 
             // Helper for smooth transitions
             renderView: (html) => {
+                // Close any open modals
+                document.querySelectorAll('.modal').forEach(m => m.classList.remove('is-active'));
+
                 const root = document.getElementById('app-root');
                 // Wrap content in transition div
                 root.innerHTML = `<div class="view-content">${html}</div>`;
@@ -1047,6 +1073,9 @@
                                         <button class="button is-info" onclick="App.Editor.loadVideo()">Load Video</button>
                                     </div>
                                 </div>
+                                <p class="help is-italic mt-1">
+                                    <i class="fas fa-info-circle"></i> Google Drive videos must be shared with "Anyone with the link". Large files (>100MB) may be blocked by virus scan.
+                                </p>
                             </div>
                             <div class="box is-flex-grow-1 is-paddingless is-clipped" style="position: relative; background: #000;">
                                 <div id="editor-video-container" class="video-container" style="height: 100%; padding-bottom: 0;">
@@ -1101,6 +1130,7 @@
                                                 <div class="select is-small is-fullwidth">
                                                     <select id="q-type" onchange="App.Editor.toggleOptions()">
                                                         <option value="mc">Multiple Choice</option>
+                                                        <option value="ms">Multi-Select</option>
                                                         <option value="open">Open Ended</option>
                                                         <option value="note">Note / Tip</option>
                                                     </select>
@@ -1256,6 +1286,11 @@
                             q.options.forEach((opt, idx) => {
                                 App.Editor.addOptionInput(opt, idx === q.correctIndex);
                             });
+                        } else if (q.type === 'ms') {
+                            q.options.forEach((opt, idx) => {
+                                const isCorrect = q.correctIndices && q.correctIndices.includes(idx);
+                                App.Editor.addOptionInput(opt, isCorrect);
+                            });
                         }
                     } else {
                         // NEW MODE
@@ -1287,19 +1322,46 @@
                 toggleOptions: () => {
                     const type = document.getElementById('q-type').value;
                     const container = document.getElementById('q-options-container');
-                    if (type === 'mc') container.classList.remove('is-hidden');
-                    else container.classList.add('is-hidden');
+
+                    if (type === 'mc' || type === 'ms') {
+                        container.classList.remove('is-hidden');
+
+                        // Check if we need to switch input types (radio <-> checkbox)
+                        const list = document.getElementById('q-options-list');
+                        const currentInputs = list.querySelectorAll('input[name="correct-answer"]');
+                        if (currentInputs.length > 0) {
+                            const expectedType = type === 'ms' ? 'checkbox' : 'radio';
+                            if (currentInputs[0].type !== expectedType) {
+                                // Re-render to switch types
+                                const values = [];
+                                const checkedState = [];
+                                const textInputs = list.querySelectorAll('.option-input');
+                                textInputs.forEach((input, i) => {
+                                    values.push(input.value);
+                                    checkedState.push(currentInputs[i].checked);
+                                });
+                                list.innerHTML = '';
+                                values.forEach((v, i) => App.Editor.addOptionInput(v, checkedState[i]));
+                            }
+                        }
+                    } else {
+                        container.classList.add('is-hidden');
+                    }
                 },
 
                 addOptionInput: (val = '', isCorrect = false) => {
+                    const type = document.getElementById('q-type').value;
+                    const isMulti = type === 'ms';
+                    const inputType = isMulti ? 'checkbox' : 'radio';
+
                     const list = document.getElementById('q-options-list');
                     const idx = list.children.length;
                     const div = document.createElement('div');
                     div.className = 'field has-addons mb-2';
                     div.innerHTML = `
                         <div class="control">
-                            <span class="button is-static is-small">
-                                <input type="radio" name="correct-answer" value="${idx}" ${isCorrect || (idx === 0 && !val) ? 'checked' : ''}>
+                            <span class="button is-white is-small">
+                                <input type="${inputType}" name="correct-answer" value="${idx}" ${isCorrect || (!isMulti && idx === 0 && !val) ? 'checked' : ''}>
                             </span>
                         </div>
                         <div class="control is-expanded">
@@ -1327,52 +1389,34 @@
                         type: type,
                         text: text,
                         options: [],
-                        correctIndex: null
+                        correctIndex: null,
+                        correctIndices: []
                     };
 
-                    if (type === 'mc') {
+                    if (type === 'mc' || type === 'ms') {
                         const inputs = document.querySelectorAll('.option-input');
-                        const radios = document.getElementsByName('correct-answer');
-                        let valid = false;
-                        inputs.forEach((input, index) => {
-                            if (input.value.trim()) {
-                                qData.options.push(input.value.trim());
-                                // Determine if this index was checked. 
-                                // We need to map the visual index back to the data index.
-                                // Actually, radios are by Name, so browser handles one checked.
-                                // We just need to find WHICH radio is checked.
-                            }
-                        });
+                        const checkInputs = document.getElementsByName('correct-answer');
                         
-                        // Find checked radio value
-                        let checkedVal = -1;
-                        for (let i = 0; i < radios.length; i++) {
-                            if (radios[i].checked) {
-                                // The value of the radio corresponds to its original position in the DOM list
-                                // We need to be careful if items were deleted.
-                                // Simplification: Just rebuild options and take the one that is checked relative to the inputs list.
-                                checkedVal = i; 
-                                break;
-                            }
-                        }
-                        
-                        // Re-validate correct index against filtered options
-                        // This logic is tricky if user deletes option 1 but checks option 2.
-                        // Better approach: Iterate inputs and check corresponding radio.
                         qData.options = [];
-                        let newCorrectIndex = 0;
+                        let newCorrectIndex = null;
                         let currentOptIndex = 0;
                         
                         inputs.forEach((input, index) => {
                             if (input.value.trim()) {
                                 qData.options.push(input.value.trim());
-                                if (radios[index].checked) newCorrectIndex = currentOptIndex;
+                                if (checkInputs[index].checked) {
+                                    if (type === 'mc') newCorrectIndex = currentOptIndex;
+                                    else qData.correctIndices.push(currentOptIndex);
+                                }
                                 currentOptIndex++;
                             }
                         });
-                        qData.correctIndex = newCorrectIndex;
 
-                        if (qData.options.length < 2) return alert('Add at least 2 valid options for Multiple Choice.');
+                        if (type === 'mc') qData.correctIndex = newCorrectIndex;
+
+                        if (qData.options.length < 2) return alert('Add at least 2 valid options.');
+                        if (type === 'mc' && qData.correctIndex === null) return alert('Select a correct answer.');
+                        if (type === 'ms' && qData.correctIndices.length === 0) return alert('Select at least one correct answer.');
                     }
 
                     if (editId) {
@@ -1513,11 +1557,16 @@
                                             <span class="is-size-7 is-family-monospace mr-3" style="min-width: 45px; text-align: right;" id="time-current">00:00</span>
                                             <div class="timeline-container">
                                                 <input type="range" id="seek-bar" min="0" max="100" value="0" step="1" oninput="App.Player.seek(this.value)">
+                                                <div id="timeline-segment" class="timeline-segment is-hidden"></div>
                                                 <div id="timeline-markers" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
                                             </div>
                                             <span class="is-size-7 is-family-monospace" style="min-width: 45px;" id="time-duration">00:00</span>
                                         </div>
                                     </div>
+                                    <button id="btn-finish-lesson" class="button is-success is-fullwidth mt-4 is-hidden shadow is-medium" onclick="App.Player.finishLesson()">
+                                        <span class="icon"><i class="fas fa-check-circle"></i></span>
+                                        <span>Lesson Completed! Go to Results</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1563,6 +1612,7 @@
                     App.Player.activeQuestionId = null;
                     App.Player.pendingQuestionId = null;
                     App.Player.maxTime = 0;
+                    App.Player.isFinished = false;
 
                     // Save Metadata for "My Assignments"
                     if (encodedSource) {
@@ -1595,8 +1645,30 @@
 
                 renderMarkers: () => {
                     const duration = App.videoManager.getDuration();
+
+                    if (!duration) return;
+
+                    // Render Segment
+                    const segment = document.getElementById('timeline-segment');
+                    if (segment && segment.classList.contains('is-hidden')) {
+                        const settings = App.Player.lessonData.settings;
+                        const start = settings.startTime || 0;
+                        const end = settings.endTime || 0;
+
+                        if (start > 0 || (end > 0 && end < duration)) {
+                            const startPct = (start / duration) * 100;
+                            const endVal = (end > 0) ? end : duration;
+                            const endPct = (endVal / duration) * 100;
+                            const widthPct = endPct - startPct;
+
+                            segment.style.left = `${startPct}%`;
+                            segment.style.width = `${widthPct}%`;
+                            segment.classList.remove('is-hidden');
+                        }
+                    }
+
                     const container = document.getElementById('timeline-markers');
-                    if (!duration || !container || container.children.length > 0) return;
+                    if (!container || container.children.length > 0) return;
 
                     App.Player.lessonData.questions.forEach(q => {
                         const pct = (q.time / duration) * 100;
@@ -1611,7 +1683,7 @@
                 onStateChange: (state) => {
                     if (state.status === 'ended') {
                         document.getElementById('play-icon').className = 'fas fa-undo';
-                        App.Player.finishLesson();
+                        if (!App.Player.isFinished) App.Player.showFinishButton();
                         return;
                     }
 
@@ -1630,7 +1702,7 @@
                         // Enforce End Time
                         if (endTime && endTime > 0 && state.time >= endTime) {
                             App.videoManager.pause();
-                            App.Player.finishLesson();
+                            if (!App.Player.isFinished) App.Player.showFinishButton();
                             return;
                         }
 
@@ -1651,6 +1723,15 @@
                             App.Player.saveProgress(state.time);
                             App.Player.lastSave = now;
                         }
+                    }
+                },
+
+                showFinishButton: () => {
+                    const btn = document.getElementById('btn-finish-lesson');
+                    if(btn) {
+                        btn.classList.remove('is-hidden');
+                        btn.scrollIntoView({ behavior: 'smooth' });
+                        App.Player.isFinished = true;
                     }
                 },
 
@@ -1782,9 +1863,22 @@
                         content += `<div class="control mt-4">`;
                         q.options.forEach((opt, i) => {
                             content += `
-                                <label class="radio panel-block">
+                                <label class="answer-option">
                                     <input type="radio" name="student-answer" value="${i}">
-                                    <span class="ml-2">${opt}</span>
+                                    <span>${opt}</span>
+                                </label>
+                            `;
+                        });
+                        content += `</div><div id="feedback-msg" class="mt-3 is-hidden"></div>`;
+                        footerBtn.innerText = "Submit";
+                        footerBtn.onclick = () => App.Player.submitAnswer(q);
+                    } else if (q.type === 'ms') {
+                        content += `<div class="control mt-4">`;
+                        q.options.forEach((opt, i) => {
+                            content += `
+                                <label class="answer-option">
+                                    <input type="checkbox" name="student-answer" value="${i}">
+                                    <span>${opt}</span>
                                 </label>
                             `;
                         });
@@ -1829,6 +1923,29 @@
                             document.getElementById('q-modal-submit').innerText = "Continue";
                             document.getElementById('q-modal-submit').onclick = () => App.Player.markComplete(q.id, { selected: val, correct: false });
                         }
+                    } else if (q.type === 'ms') {
+                        const selectedEls = document.querySelectorAll('input[name="student-answer"]:checked');
+                        if (selectedEls.length === 0) return App.UI.alert('Please select at least one answer.', 'Incomplete');
+
+                        const selected = Array.from(selectedEls).map(el => parseInt(el.value));
+                        const correctIndices = q.correctIndices || [];
+
+                        // Check if selected matches correctIndices exactly
+                        const isCorrect = selected.length === correctIndices.length &&
+                                          selected.every(val => correctIndices.includes(val));
+
+                        const feedback = document.getElementById('feedback-msg');
+                        feedback.classList.remove('is-hidden');
+
+                        if (isCorrect) {
+                             feedback.innerHTML = `<span class="tag is-success is-large is-light">Correct!</span>`;
+                             setTimeout(() => App.Player.markComplete(q.id, { selected: selected, correct: true }), 1500);
+                        } else {
+                             const correctText = correctIndices.map(i => q.options[i]).join(', ');
+                             feedback.innerHTML = `<span class="tag is-danger is-large is-light">Incorrect. The correct answer(s): ${correctText}</span>`;
+                             document.getElementById('q-modal-submit').innerText = "Continue";
+                             document.getElementById('q-modal-submit').onclick = () => App.Player.markComplete(q.id, { selected: selected, correct: false });
+                        }
                     } else if (q.type === 'open') {
                         const text = document.getElementById('student-text-response').value;
                         if (!text.trim()) return App.UI.alert('Please write something.', 'Incomplete');
@@ -1859,7 +1976,7 @@
                      let score = 0;
                      let totalMc = 0;
                      App.Player.lessonData.questions.forEach(q => {
-                        if (q.type === 'mc') {
+                        if (q.type === 'mc' || q.type === 'ms') {
                             totalMc++;
                             const ans = App.Player.answers[q.id];
                             if(ans && ans.correct) score++;
@@ -1952,6 +2069,10 @@
                                 if (q.type === 'mc') {
                                     answerText = q.options[ans.selected] || 'No Answer';
                                     result = ans.correct ? 'Correct' : 'Incorrect';
+                                } else if (q.type === 'ms') {
+                                    const selected = ans.selected || [];
+                                    answerText = selected.map(i => q.options[i]).join('; ') || 'No Answer';
+                                    result = ans.correct ? 'Correct' : 'Incorrect';
                                 } else if (q.type === 'open') {
                                     answerText = (ans.text || '').replace(/,/g, ' ');
                                     result = 'Submitted';
@@ -1993,6 +2114,10 @@
                         
                         if (q.type === 'mc') {
                             answerText = q.options[ans.selected] || 'No Answer';
+                            result = ans.correct ? 'Correct' : 'Incorrect';
+                        } else if (q.type === 'ms') {
+                            const selected = ans.selected || [];
+                            answerText = selected.map(i => q.options[i]).join('; ') || 'No Answer';
                             result = ans.correct ? 'Correct' : 'Incorrect';
                         } else if (q.type === 'open') {
                             answerText = (ans.text || '').replace(/,/g, ' '); // simple escape
