@@ -209,6 +209,8 @@
             align-items: center;
             justify-content: flex-start;
             gap: 0.75rem;
+            width: 100%;
+            margin-bottom: 0.5rem;
         }
 
         #pending-question-indicator {
@@ -425,6 +427,7 @@
             detectType(url) {
                 if (url.includes('youtube') || url.includes('youtu.be')) return 'youtube';
                 if (url.includes('vimeo')) return 'vimeo';
+                if (url.includes('drive.google.com')) return 'googledrive';
                 return 'unknown';
             }
 
@@ -438,6 +441,9 @@
                     const regExp = /vimeo.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|album\/(?:\d+)\/video\/|video\/|)(\d+)(?:$|\/|\?)/;
                     const match = url.match(regExp);
                     return match ? match[1] : null;
+                } else if (this.type === 'googledrive') {
+                    const match = url.match(/\/d\/(.+?)\/(view|preview)/);
+                    return match ? match[1] : null;
                 }
                 return null;
             }
@@ -446,6 +452,7 @@
                 document.getElementById(this.containerId).innerHTML = ''; // Clear container
                 if (this.type === 'youtube') this.initYouTube();
                 else if (this.type === 'vimeo') this.initVimeo();
+                else if (this.type === 'googledrive') this.initGoogleDrive();
             }
 
             destroy() {
@@ -454,6 +461,12 @@
                         try { this.player.destroy(); } catch(e) { console.error(e); }
                     } else if (this.type === 'vimeo' && typeof this.player.unload === 'function') {
                         try { this.player.unload(); } catch(e) { console.error(e); }
+                    } else if (this.type === 'googledrive') {
+                        try {
+                            this.player.pause();
+                            this.player.src = '';
+                            this.player.load();
+                        } catch(e) { console.error(e); }
                     }
                     this.player = null;
                 }
@@ -526,31 +539,62 @@
                 this.player.on('ended', () => this.onStateChange({ status: 'ended' }));
             }
 
+            initGoogleDrive() {
+                const container = document.getElementById(this.containerId);
+                const streamUrl = `https://drive.google.com/uc?export=download&id=${this.videoId}`;
+
+                container.innerHTML = `
+                    <video id="${this.containerId}-video" style="width:100%; height:100%; object-fit: contain;"
+                           ${this.enableControls ? 'controls' : ''}
+                           controlsList="nodownload">
+                        <source src="${streamUrl}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                `;
+
+                this.player = document.getElementById(`${this.containerId}-video`);
+
+                this.player.onloadedmetadata = () => this.onReady();
+                this.player.ontimeupdate = () => {
+                    this.onStateChange({ time: this.player.currentTime, status: 'playing' });
+                };
+                this.player.onended = () => {
+                     this.onStateChange({ status: 'ended' });
+                };
+                this.player.onplay = () => this.onStateChange({ status: 'playing' });
+                this.player.onpause = () => this.onStateChange({ status: 'paused' });
+            }
+
             getCurrentTime() {
                 // Wrapper
                 if (this.type === 'youtube' && this.player && this.player.getCurrentTime) return this.player.getCurrentTime();
+                if (this.type === 'googledrive' && this.player) return this.player.currentTime;
                 // Vimeo is async, this is a simplified sync wrapper stub, might need async handling in real implementation
                 return 0; 
             }
 
             getDuration() {
                 if (this.type === 'youtube' && this.player && this.player.getDuration) return this.player.getDuration();
+                if (this.type === 'googledrive' && this.player) return this.player.duration;
                 return 0;
             }
 
             seekTo(seconds) {
                 if (this.type === 'youtube') this.player.seekTo(seconds, true);
                 else if (this.type === 'vimeo') this.player.setCurrentTime(seconds);
+                else if (this.type === 'googledrive') this.player.currentTime = seconds;
             }
 
             play() {
                 if (this.type === 'youtube') this.player.playVideo();
                 else if (this.type === 'vimeo') this.player.play();
+                else if (this.type === 'googledrive') this.player.play();
             }
 
             pause() {
                 if (this.type === 'youtube') this.player.pauseVideo();
                 else if (this.type === 'vimeo') this.player.pause();
+                else if (this.type === 'googledrive') this.player.pause();
             }
         }
 
@@ -704,7 +748,7 @@
                                         ` : ''}
                                     </div>
                                     <p class="help is-italic mt-5">
-                                        <i class="fas fa-check-circle has-text-success"></i> Works with YouTube & Vimeo
+                                        <i class="fas fa-check-circle has-text-success"></i> Works with YouTube, Vimeo & Google Drive
                                         <span class="ml-4"><i class="fas fa-check-circle has-text-success"></i> Free & Open Source</span>
                                     </p>
                                 </div>
@@ -722,7 +766,7 @@
                                 <div class="box h-100">
                                     <span class="icon is-large has-text-info mb-3"><i class="fas fa-3x fa-video"></i></span>
                                     <h3 class="title is-5">1. Load Video</h3>
-                                    <p>Paste any YouTube or Vimeo URL. We'll load it instantly for you to edit.</p>
+                                    <p>Paste any YouTube, Vimeo, or Google Drive URL. We'll load it instantly for you to edit.</p>
                                 </div>
                             </div>
                             <div class="column is-4">
@@ -911,10 +955,15 @@
                                                     </td>
                                                     <td class="is-size-7">${date}</td>
                                                     <td class="has-text-right">
-                                                        <a class="button is-small is-primary is-light" href="#data=${a.source}">
-                                                            <span class="icon"><i class="fas fa-play"></i></span>
-                                                            <span>Resume</span>
-                                                        </a>
+                                                        <div class="buttons is-right">
+                                                            <button class="button is-small is-info is-light" onclick="App.Player.downloadReportFromProgress('${a.id}')" title="Share Results">
+                                                                <span class="icon"><i class="fas fa-file-csv"></i></span>
+                                                            </button>
+                                                            <a class="button is-small is-primary is-light" href="#data=${a.source}">
+                                                                <span class="icon"><i class="fas fa-play"></i></span>
+                                                                <span>Resume</span>
+                                                            </a>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                                 `;
@@ -992,7 +1041,7 @@
                             <div class="box is-flex-shrink-0">
                                 <div class="field has-addons">
                                     <div class="control is-expanded">
-                                        <input class="input" type="text" id="video-url-input" placeholder="Paste YouTube or Vimeo URL" value="${App.currentLesson.videoUrl}">
+                                        <input class="input" type="text" id="video-url-input" placeholder="Paste YouTube, Vimeo, or Google Drive URL" value="${App.currentLesson.videoUrl}">
                                     </div>
                                     <div class="control">
                                         <button class="button is-info" onclick="App.Editor.loadVideo()">Load Video</button>
@@ -1098,6 +1147,21 @@
                                             Prevent Skipping
                                         </label>
                                         <p class="help">Students cannot fast-forward past what they've watched.</p>
+                                    </div>
+                                    <hr>
+                                    <h5 class="subtitle is-6">Targeted Segment</h5>
+                                    <div class="field">
+                                        <label class="label is-small">Start Time (seconds)</label>
+                                        <div class="control">
+                                            <input class="input is-small" type="number" min="0" value="${App.currentLesson.settings.startTime || 0}" onchange="App.currentLesson.settings.startTime = parseFloat(this.value); App.Editor.saveProject(false);">
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">End Time (seconds)</label>
+                                        <div class="control">
+                                            <input class="input is-small" type="number" min="0" value="${App.currentLesson.settings.endTime || 0}" onchange="App.currentLesson.settings.endTime = parseFloat(this.value); App.Editor.saveProject(false);">
+                                        </div>
+                                        <p class="help">Leave 0 to play until the end.</p>
                                     </div>
                                 </div>
 
@@ -1350,15 +1414,16 @@
                 },
 
                 deleteQuestion: (id) => {
-                    if(!confirm('Delete this question?')) return;
-                    App.currentLesson.questions = App.currentLesson.questions.filter(q => q.id !== id);
-                    App.Editor.renderQuestionList();
-                    App.Editor.saveProject(false);
+                    App.UI.confirm('Delete this question?', () => {
+                        App.currentLesson.questions = App.currentLesson.questions.filter(q => q.id !== id);
+                        App.Editor.renderQuestionList();
+                        App.Editor.saveProject(false);
+                    }, 'Delete Question');
                 },
 
                 saveProject: (showAlert = true) => {
                      Storage.saveDraft(App.currentLesson);
-                     if (showAlert) alert('Project saved to "My Projects"!');
+                     if (showAlert) App.UI.alert('Project saved to "My Projects"!', 'Success');
                 },
 
                 shareLesson: () => {
@@ -1463,10 +1528,14 @@
                     App.videoManager = new VideoManager('student-video-container', lessonData.videoUrl,
                         () => {
                             console.log('Student Player Ready');
+                            const startTime = lessonData.settings.startTime || 0;
+
                             if (savedProgress && savedProgress.time > 5) {
                                 App.UI.confirm('Resume from where you left off?', () => {
                                     App.videoManager.seekTo(savedProgress.time);
                                 }, 'Resume Lesson');
+                            } else if (startTime > 0) {
+                                App.videoManager.seekTo(startTime);
                             }
                         },
                         (state) => App.Player.onStateChange(state)
@@ -1555,6 +1624,21 @@
                     }
 
                     if (state.time !== undefined) {
+                        const startTime = App.Player.lessonData.settings.startTime || 0;
+                        const endTime = App.Player.lessonData.settings.endTime;
+
+                        // Enforce End Time
+                        if (endTime && endTime > 0 && state.time >= endTime) {
+                            App.videoManager.pause();
+                            App.Player.finishLesson();
+                            return;
+                        }
+
+                        // Enforce Start Time
+                        if (state.time < startTime && (startTime - state.time > 1)) {
+                             App.videoManager.seekTo(startTime);
+                        }
+
                         if (state.time > App.Player.maxTime) App.Player.maxTime = state.time;
 
                         App.Player.renderMarkers();
@@ -1598,8 +1682,11 @@
                 },
 
                 seek: (val) => {
-                    const seconds = parseFloat(val);
+                    let seconds = parseFloat(val);
                     const preventSkip = App.Player.lessonData.settings.preventSkip;
+                    const startTime = App.Player.lessonData.settings.startTime || 0;
+
+                    if (seconds < startTime) seconds = startTime;
 
                     if (preventSkip && seconds > App.Player.maxTime) {
                         App.videoManager.seekTo(App.Player.maxTime);
@@ -1814,6 +1901,83 @@
                         </div>
                      `;
                      App.renderView(html);
+                },
+
+                downloadReportFromProgress: (id) => {
+                    const progress = Storage.getProgress(id);
+                    if (!progress || !progress.source) {
+                        return App.UI.alert('Could not retrieve assignment data.', 'Error');
+                    }
+
+                    try {
+                        const json = LZString.decompressFromEncodedURIComponent(progress.source);
+                        const lessonData = JSON.parse(json);
+
+                        const answeredIds = new Set(progress.answeredIds || []);
+                        const answers = progress.answers || {};
+                        const total = lessonData.questions.length;
+                        const answeredCount = answeredIds.size;
+
+                        const isComplete = answeredCount >= total;
+                        const status = isComplete ? "Complete" : "Incomplete";
+
+                        const message = `
+                            <div class="content">
+                                <p>Generate report for <strong>${lessonData.title}</strong>?</p>
+                                <p>Status: <span class="tag ${isComplete ? 'is-success' : 'is-warning'}">${status}</span></p>
+                                <div class="field">
+                                    <label class="label">Student Name</label>
+                                    <div class="control">
+                                        <input class="input" type="text" id="report-modal-name" placeholder="Enter Name">
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+
+                        App.UI.confirm(message, () => {
+                             const nameInput = document.getElementById('report-modal-name');
+                             const name = nameInput ? nameInput.value.trim() : '';
+                             if (!name) {
+                                 setTimeout(() => App.UI.alert("Please enter a name to download the report.", "Name Required"), 300);
+                                 return;
+                             }
+
+                             let csv = `Student Name, ${name}\nAssignment, ${lessonData.title}\nStatus, ${status}\nDate, ${new Date().toLocaleDateString()}\n\nQuestion, Type, Answer, Result\n`;
+
+                             lessonData.questions.forEach(q => {
+                                const ans = answers[q.id] || {};
+                                let answerText = '';
+                                let result = '';
+
+                                if (q.type === 'mc') {
+                                    answerText = q.options[ans.selected] || 'No Answer';
+                                    result = ans.correct ? 'Correct' : 'Incorrect';
+                                } else if (q.type === 'open') {
+                                    answerText = (ans.text || '').replace(/,/g, ' ');
+                                    result = 'Submitted';
+                                } else {
+                                    answerText = 'N/A';
+                                    result = 'Read';
+                                }
+
+                                csv += `"${q.text.replace(/"/g, '""')}", ${q.type}, "${answerText}", ${result}\n`;
+                             });
+
+                             const blob = new Blob([csv], { type: 'text/csv' });
+                             const url = window.URL.createObjectURL(blob);
+                             const a = document.createElement('a');
+                             a.setAttribute('hidden', '');
+                             a.setAttribute('href', url);
+                             a.setAttribute('download', `${name}_Result.csv`);
+                             document.body.appendChild(a);
+                             a.click();
+                             document.body.removeChild(a);
+                        }, 'Download Report');
+
+                    } catch(e) {
+                        console.error(e);
+                        App.UI.alert('Error generating report.', 'Error');
+                    }
                 },
 
                 downloadReport: () => {
