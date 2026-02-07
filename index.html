@@ -450,7 +450,7 @@
             detectType(url) {
                 if (url.includes('youtube') || url.includes('youtu.be')) return 'youtube';
                 if (url.includes('vimeo')) return 'vimeo';
-                if (url.includes('drive.google.com')) return 'googledrive';
+                if (url.includes('drive.google.com') || url.includes('docs.google.com')) return 'googledrive';
                 return 'unknown';
             }
 
@@ -465,7 +465,7 @@
                     const match = url.match(regExp);
                     return match ? match[1] : null;
                 } else if (this.type === 'googledrive') {
-                    const match = url.match(/\/d\/(.+?)\/(view|preview)/);
+                    const match = url.match(/(?:\/d\/|id=)([\w-]+)/);
                     return match ? match[1] : null;
                 }
                 return null;
@@ -576,6 +576,10 @@
                 `;
 
                 this.player = document.getElementById(`${this.containerId}-video`);
+
+                this.player.onerror = () => {
+                    App.UI.alert("Google Drive video could not be loaded. This usually means the file is not public, is too large, or is not a direct video file.", "Playback Error");
+                };
 
                 this.player.onloadedmetadata = () => this.onReady();
                 this.player.ontimeupdate = () => {
@@ -1251,6 +1255,17 @@
                         (state) => { /* Update time display if needed */ },
                         true // Enable Controls for Teacher
                     );
+
+                    if (App.videoManager.type === 'googledrive') {
+                        App.UI.showModal(
+                            "<b>Google Drive Compatibility Notice:</b><br><br>" +
+                            "Interactive features (auto-pause) require direct file access. Please ensure your video is:<br>" +
+                            "1. Shared as 'Anyone with the link'<br>" +
+                            "2. Less than 100MB (to avoid virus scan page)<br><br>" +
+                            "If playback fails, we recommend hosting on YouTube or Vimeo.",
+                            { title: 'Google Drive Video' }
+                        );
+                    }
                 },
 
                 formatTime: (seconds) => {
@@ -1516,9 +1531,6 @@
                     const json = LZString.decompressFromEncodedURIComponent(encoded);
                     const lessonData = JSON.parse(json);
                     
-                    // Initialize Player State
-                    const savedProgress = App.Player.init(lessonData, encoded);
-
                     const html = `
                         <div class="container is-max-widescreen">
                             <div class="columns is-centered">
@@ -1573,6 +1585,9 @@
                     `;
                     
                     App.renderView(html);
+
+                    // Initialize Player State (after render so UI exists)
+                    const savedProgress = App.Player.init(lessonData, encoded);
 
                     App.videoManager = new VideoManager('student-video-container', lessonData.videoUrl,
                         () => {
